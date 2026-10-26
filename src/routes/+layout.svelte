@@ -1,7 +1,6 @@
 <script lang="ts">
   import "../app.css";
   import { env } from "$env/dynamic/public";
-  import RebrandNotice from "$lib/components/RebrandNotice.svelte";
   import { current, initializeLanguage } from "$lib/i18n/index.svelte";
   import { onMount } from "svelte";
 
@@ -29,5 +28,3 @@
 </svelte:head>
 
 {@render children()}
-
-<RebrandNotice />
