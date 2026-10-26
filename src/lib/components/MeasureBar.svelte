@@ -8,6 +8,7 @@
     DIMENSION_STEP,
     DIMENSION_TYPED_MAX,
   } from "$lib/domain/types";
+  import { CUBE_EDGE_MAX } from "$lib/domain/unitCubes";
   import {
     domainText,
     t,
@@ -31,6 +32,16 @@
   } = $props();
 
   const linear = $derived(unitLabels(lab.unit).linear);
+
+  /**
+   * Unit cubes take whole edges up to {@link CUBE_EDGE_MAX}, so while they are
+   * showing every control here moves in whole units and stops there.
+   */
+  const inCubes = $derived(lab.view === "cubes");
+  const nudge = $derived(inCubes ? 1 : DIMENSION_STEP);
+  const lowest = $derived(inCubes ? 1 : DIMENSION_MIN);
+  const highest = $derived(inCubes ? CUBE_EDGE_MAX : DIMENSION_TYPED_MAX);
+  const sliderMax = $derived(inCubes ? CUBE_EDGE_MAX : DIMENSION_MAX);
 
   const step =
     "grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-md border border-rule bg-panel text-base leading-none font-bold text-ink-soft hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-30";
@@ -138,12 +149,11 @@
             class={stepClass}
             aria-label={t("measure.decrease", {
               label: domainText(spec.label),
-              step: DIMENSION_STEP,
+              step: nudge,
             })}
             data-testid="decrease-{spec.key}"
-            disabled={lab.dimensions[spec.key] <= DIMENSION_MIN}
-            onclick={() => lab.nudgeDimension(spec.key, -DIMENSION_STEP)}
-            >−</button
+            disabled={lab.dimensions[spec.key] <= lowest}
+            onclick={() => lab.nudgeDimension(spec.key, -nudge)}>−</button
           >
           <label class="sr-only" for="dimension-{spec.key}"
             >{t("measure.inUnit", {
@@ -171,12 +181,11 @@
             class={stepClass}
             aria-label={t("measure.increase", {
               label: domainText(spec.label),
-              step: DIMENSION_STEP,
+              step: nudge,
             })}
             data-testid="increase-{spec.key}"
-            disabled={lab.dimensions[spec.key] >= DIMENSION_TYPED_MAX}
-            onclick={() => lab.nudgeDimension(spec.key, DIMENSION_STEP)}
-            >+</button
+            disabled={lab.dimensions[spec.key] >= highest}
+            onclick={() => lab.nudgeDimension(spec.key, nudge)}>+</button
           >
           <!-- The slider only covers the sizes that read well on screen. A typed
              value may be far larger; the handle then rests at the top of the
@@ -184,15 +193,15 @@
           <input
             class={compact ? "hidden" : "hidden w-28 accent-accent sm:block"}
             type="range"
-            min={DIMENSION_MIN}
-            max={DIMENSION_MAX}
-            step={DIMENSION_STEP}
+            min={lowest}
+            max={sliderMax}
+            step={nudge}
             data-testid="range-{spec.key}"
             aria-label={t("measure.slider", {
               label: domainText(spec.label),
               unit: linear,
             })}
-            value={Math.min(lab.dimensions[spec.key], DIMENSION_MAX)}
+            value={Math.min(lab.dimensions[spec.key], sliderMax)}
             oninput={(event) =>
               lab.setDraft(spec.key, event.currentTarget.value)}
           />

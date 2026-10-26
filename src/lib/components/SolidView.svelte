@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Floor from "$lib/components/Floor.svelte";
   import MathText from "$lib/components/MathText.svelte";
   import { evalExact, formatExact } from "$lib/domain/exact";
   import { approximateText, formatApproximate } from "$lib/domain/format";
@@ -26,7 +27,7 @@
     LOGO_MARK_TICK,
     logoMarkTransform,
   } from "$lib/ui/logoMark";
-  import { floorPlane, floorRules } from "$lib/ui/floor";
+  import { floorPlane } from "$lib/ui/floor";
   import { fitFraction, gridLayers, gridScale } from "$lib/ui/grid";
   import { measureBox } from "$lib/ui/measureBox";
   import { stageRise, stageRoom } from "$lib/ui/stage";
@@ -116,9 +117,6 @@
   $effect(() => {
     onGrid?.(grid.step);
   });
-
-  const FLOOR_MASK_ID = "floor-reach";
-  const FLOOR_FADE_ID = "floor-fade";
 
   /**
    * The foot of the solid. Every mesh is built around its own centre, so this
@@ -572,27 +570,6 @@
     onkeydown={onKeyDown}
   >
     <defs>
-      <!-- The floor has no edge to it: it is ruled well past what is drawn and
-           then faded out in a circle around the solid, so the ruling thins into
-           the background instead of stopping at a rectangle. The fade is a
-           circle *on the floor*, laid into the scene by the same matrix as the
-           ruling, so it comes out as the ellipse the eye expects. -->
-      <radialGradient id={FLOOR_FADE_ID}>
-        <stop offset="0.45" stop-color="#fff" />
-        <stop offset="1" stop-color="#000" />
-      </radialGradient>
-      <mask
-        id={FLOOR_MASK_ID}
-        maskUnits="userSpaceOnUse"
-        x={-halfWidth}
-        y={-centerY}
-        width={halfWidth * 2}
-        height={halfHeight * 2}
-      >
-        <g transform={floor.matrix}>
-          <circle cx="0" cy="0" r={floorRadius} fill="url(#{FLOOR_FADE_ID})" />
-        </g>
-      </mask>
       <pattern
         id={HATCH_PATTERN_ID}
         width="14"
@@ -613,44 +590,18 @@
     </defs>
 
     {#snippet ground()}
-      <g
-        mask="url(#{FLOOR_MASK_ID})"
-        opacity={floor.openness}
-        pointer-events="none"
-      >
-        <g transform={floor.matrix}>
-          <circle cx="0" cy="0" r={floorRadius} fill="#46606f" opacity="0.05" />
-          <!-- The lines are laid out in the floor's own units, so
-               non-scaling-stroke is what keeps them a hairline on screen
-               instead of a unit thick in the scene. -->
-          {#each floorLayers as layer (layer.key)}
-            <g stroke="#46606f" stroke-opacity={layer.ink}>
-              <!-- Each direction is anchored on the footprint edge it crosses,
-                   so both run along the solid's own sides. -->
-              {#each floorRules(layer.step, floorRadius, footprint.x) as rule (rule)}
-                <line
-                  x1={rule}
-                  y1={-floorRadius}
-                  x2={rule}
-                  y2={floorRadius}
-                  stroke-width="1"
-                  vector-effect="non-scaling-stroke"
-                />
-              {/each}
-              {#each floorRules(layer.step, floorRadius, footprint.z) as rule (rule)}
-                <line
-                  x1={-floorRadius}
-                  y1={rule}
-                  x2={floorRadius}
-                  y2={rule}
-                  stroke-width="1"
-                  vector-effect="non-scaling-stroke"
-                />
-              {/each}
-            </g>
-          {/each}
-        </g>
-      </g>
+      <Floor
+        {floor}
+        radius={floorRadius}
+        layers={floorLayers}
+        {footprint}
+        view={{
+          x: -halfWidth,
+          y: -centerY,
+          width: halfWidth * 2,
+          height: halfHeight * 2,
+        }}
+      />
     {/snippet}
 
     <!-- Seen from above the solid stands on the floor and hides the part it

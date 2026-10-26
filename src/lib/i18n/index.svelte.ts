@@ -1,5 +1,6 @@
 import { browser } from "$app/environment";
 import type { UnitKey, UnitLabels } from "$lib/domain/format";
+import { CUBE_EDGE_MESSAGE } from "$lib/domain/unitCubes";
 import { RANGE_MESSAGE, STEP_MESSAGE } from "$lib/domain/validation";
 
 export type LanguageCode = "en" | "es" | "fr";
@@ -28,6 +29,9 @@ const en = {
     "view.label": "View",
     "view.solid": "Solid",
     "view.net": "Net",
+    "view.cubes": "Cubes",
+    "view.noCubes":
+      "Only a rectangular prism or a cube can be built exactly from whole unit cubes.",
     "view.noNet.before": "A sphere has ",
     "view.noNet.strong": "no flat net",
     "view.noNet.after":
@@ -43,6 +47,7 @@ const en = {
     "validation.number": "Enter a number",
     "validation.range": "Enter a number from 0.1 to 100000",
     "validation.step": "Use steps of 0.1, for example 2.5",
+    "validation.cubes": "Unit cubes need a whole number from 1 to 10",
     "totals.label": "Totals",
     "totals.hidden": "hidden",
     "totals.hideAnswers": "Hide the answers",
@@ -70,6 +75,16 @@ const en = {
     "solid.description":
       "{name} with {dimensions} {unit}. Drag or use the arrow keys to rotate. Point at a face or an edge to measure it.",
     "net.description": "Flat net of the {name}",
+    "cubes.label": "Unit cubes",
+    "cubes.flatten": "Lay every cube flat",
+    "cubes.remove": "Take one cube out of the solid",
+    "cubes.play": "Stack the cubes one at a time",
+    "cubes.pause": "Pause",
+    "cubes.add": "Stack one more cube",
+    "cubes.stack": "Stack every cube",
+    "cubes.count": "{stacked} of {total} unit cubes stacked",
+    "cubes.description":
+      "{name} built from unit cubes, with {dimensions} {unit}. Its layers can be laid end to end beside it. Drag or use the arrow keys to rotate.",
     "grid.key": "Each grid square is {size} {unit} across",
     "about.pageTitle": "About — Geometric Solids",
     "about.meta":
@@ -182,6 +197,9 @@ const es = {
     "view.label": "Vista",
     "view.solid": "Sólido",
     "view.net": "Red",
+    "view.cubes": "Cubos",
+    "view.noCubes":
+      "Solo un prisma rectangular o un cubo se pueden construir exactamente con cubos unitarios enteros.",
     "view.noNet.before": "Una esfera ",
     "view.noNet.strong": "no tiene una red plana",
     "view.noNet.after":
@@ -197,6 +215,8 @@ const es = {
     "validation.number": "Introduce un número",
     "validation.range": "Introduce un número entre 0.1 y 100000",
     "validation.step": "Usa incrementos de 0.1; por ejemplo, 2.5",
+    "validation.cubes":
+      "Los cubos unitarios necesitan un número entero del 1 al 10",
     "totals.label": "Totales",
     "totals.hidden": "oculto",
     "totals.hideAnswers": "Ocultar las respuestas",
@@ -224,6 +244,16 @@ const es = {
     "solid.description":
       "{name} con {dimensions} {unit}. Arrastra o usa las flechas para girarlo. Señala una cara o una arista para medirla.",
     "net.description": "Red plana de {name}",
+    "cubes.label": "Cubos unitarios",
+    "cubes.flatten": "Extender todos los cubos",
+    "cubes.remove": "Sacar un cubo del sólido",
+    "cubes.play": "Apilar los cubos de uno en uno",
+    "cubes.pause": "Pausa",
+    "cubes.add": "Apilar un cubo más",
+    "cubes.stack": "Apilar todos los cubos",
+    "cubes.count": "{stacked} de {total} cubos unitarios apilados",
+    "cubes.description":
+      "{name} construido con cubos unitarios, con {dimensions} {unit}. Sus capas se pueden colocar una tras otra a su lado. Arrastra o usa las flechas para girarlo.",
     "grid.key": "Cada cuadrado de la cuadrícula mide {size} {unit}",
     "about.pageTitle": "Acerca de — Geometric Solids",
     "about.meta":
@@ -412,6 +442,9 @@ const fr = {
     "view.label": "Vue",
     "view.solid": "Solide",
     "view.net": "Patron",
+    "view.cubes": "Cubes",
+    "view.noCubes":
+      "Seuls un pavé droit ou un cube peuvent être construits exactement avec des cubes unités entiers.",
     "view.noNet.before": "Une sphère ",
     "view.noNet.strong": "n’a pas de patron plan",
     "view.noNet.after":
@@ -427,6 +460,7 @@ const fr = {
     "validation.number": "Saisissez un nombre",
     "validation.range": "Saisissez un nombre compris entre 0.1 et 100000",
     "validation.step": "Utilisez des pas de 0.1, par exemple 2.5",
+    "validation.cubes": "Les cubes unités demandent un nombre entier de 1 à 10",
     "totals.label": "Totaux",
     "totals.hidden": "masqué",
     "totals.hideAnswers": "Masquer les réponses",
@@ -454,6 +488,16 @@ const fr = {
     "solid.description":
       "{name} avec {dimensions} {unit}. Faites glisser ou utilisez les flèches pour le faire pivoter. Pointez une face ou une arête pour la mesurer.",
     "net.description": "Patron plan de {name}",
+    "cubes.label": "Cubes unités",
+    "cubes.flatten": "Étaler tous les cubes",
+    "cubes.remove": "Retirer un cube du solide",
+    "cubes.play": "Empiler les cubes un par un",
+    "cubes.pause": "Pause",
+    "cubes.add": "Empiler un cube de plus",
+    "cubes.stack": "Empiler tous les cubes",
+    "cubes.count": "{stacked} cubes unités empilés sur {total}",
+    "cubes.description":
+      "{name} construit avec des cubes unités, avec {dimensions} {unit}. Ses couches peuvent être posées bout à bout à côté. Faites-le glisser ou utilisez les flèches pour le tourner.",
     "grid.key": "Chaque carré du quadrillage mesure {size} {unit}",
     "about.pageTitle": "À propos — Geometric Solids",
     "about.meta":
@@ -688,6 +732,7 @@ export function unitLabels(key: UnitKey): UnitLabels {
 export function validationMessage(message: string): string {
   if (message === RANGE_MESSAGE) return t("validation.range");
   if (message === STEP_MESSAGE) return t("validation.step");
+  if (message === CUBE_EDGE_MESSAGE) return t("validation.cubes");
   if (message === "Enter a number") return t("validation.number");
   return message;
 }

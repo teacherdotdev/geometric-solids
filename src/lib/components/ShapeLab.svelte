@@ -1,5 +1,7 @@
 <script lang="ts">
   import BrandChip from "$lib/components/BrandChip.svelte";
+  import CubeControls from "$lib/components/CubeControls.svelte";
+  import CubeView from "$lib/components/CubeView.svelte";
   import FloatControl from "$lib/components/FloatControl.svelte";
   import FoldTransition from "$lib/components/FoldTransition.svelte";
   import GridKey from "$lib/components/GridKey.svelte";
@@ -56,7 +58,9 @@
   let foldingKind = $state<SolidKind | null>(null);
 
   function changeView(view: ViewMode) {
-    if (view === lab.view || reducedMotion || !lab.net) {
+    // Only the net folds; the cubes take over from the solid in place.
+    const folds = view === "net" || lab.view === "net";
+    if (view === lab.view || reducedMotion || !lab.net || !folds) {
       folding = null;
       lab.setView(view);
       return;
@@ -177,6 +181,16 @@
         {chrome}
         onGrid={(step) => (gridStep = step)}
       />
+    {:else if lab.view === "cubes" && lab.cubes}
+      <CubeView
+        {lab}
+        box={lab.cubes}
+        {reducedMotion}
+        {animationWindow}
+        {lift}
+        {chrome}
+        onGrid={(step) => (gridStep = step)}
+      />
     {:else}
       <SolidView
         {lab}
@@ -218,7 +232,7 @@
   <div
     class="pointer-events-none absolute top-2 right-2 z-20 flex flex-wrap justify-end gap-1.5 sm:max-w-none {floating
       ? 'max-w-[min(22rem,62vw)]'
-      : 'max-w-[16rem]'}"
+      : 'max-w-[14rem]'}"
     use:measureBox={(_width, height) => (topHeight = height)}
   >
     {#if onFloat}
@@ -288,7 +302,13 @@
       <!-- Measured on the controls themselves: the box around them is a full
            row wide while they are on a line of their own, and would then never
            be found to fit. -->
-      <div use:measureBox={(width) => (middleWidth = width)}>
+      <div
+        class="flex flex-col items-center gap-1.5"
+        use:measureBox={(width) => (middleWidth = width)}
+      >
+        {#if lab.view === "cubes"}
+          <CubeControls {lab} {reducedMotion} />
+        {/if}
         <RotationControls {lab} {reducedMotion} compact={floating} />
       </div>
     </div>

@@ -12,10 +12,19 @@ import { buildNet } from "$lib/domain/nets";
 import { fromTenths } from "$lib/domain/rational";
 import { SOLIDS, buildSolid, defaultDimensions } from "$lib/domain/solids";
 import type { Dimensions, SolidKind } from "$lib/domain/types";
+import {
+  CUBE_EDGE_MESSAGE,
+  advanceFill,
+  cubeBox,
+  cubeCount,
+  isCubeEdge,
+  toCubeEdge,
+  type CubeRun,
+} from "$lib/domain/unitCubes";
 import { dimensionToDraft, parseDimension } from "$lib/domain/validation";
 import { surfaceHue } from "$lib/ui/colors";
 
-export type ViewMode = "solid" | "net";
+export type ViewMode = "solid" | "cubes" | "net";
 
 /**
  * What the pointer is on, or what has been pinned. A surface target names one
@@ -80,12 +89,22 @@ export class LabState {
   unit = $state<UnitKey>("units");
   answersVisible = $state(true);
   showFormulas = $state(false);
+  /**
+   * How many unit cubes are stacked in the solid; the rest lie in the flat
+   * arrangement. Only read in the cube view.
+   */
+  fill = $state(0);
+  /** Which way the cubes are moving on their own, or null while they wait. */
+  cubeRun = $state<CubeRun | null>(null);
 
   definition = $derived(SOLIDS[this.kind]);
   dimensions = $derived(this.dimensionsByKind[this.kind]);
   model = $derived(buildSolid(this.kind, this.dimensionsByKind[this.kind]));
   mesh = $derived(buildMesh(this.kind, this.dimensionsByKind[this.kind]));
   net = $derived(buildNet(this.kind, this.dimensionsByKind[this.kind]));
+  /** The solid in unit cubes, or null for one that cubes cannot fill. */
+  cubes = $derived(cubeBox(this.kind, this.dimensionsByKind[this.kind]));
+  cubeTotal = $derived(this.cubes ? cubeCount(this.cubes) : 0);
   /** Measurement lines follow the view, so a radius is never hidden behind the solid. */
   edges = $derived(
     buildEdges(
@@ -151,14 +170,48 @@ export class LabState {
     this.pinned = [];
     this.hovered = null;
     this.resetView();
-    if (!SOLIDS[kind].hasNet) this.view = "solid";
+    if (!SOLIDS[kind].hasNet && this.view === "net") this.view = "solid";
+    if (this.view === "cubes") {
+      if (SOLIDS[kind].hasCubes) this.enterCubes();
+      else this.view = "solid";
+    }
   }
 
   setView(view: ViewMode) {
     if (view === "net" && !this.definition.hasNet) return;
+    if (view === "cubes" && !this.definition.hasCubes) return;
+    if (view === this.view) return;
+    const leaving = this.view;
     this.view = view;
     // A net is flat; spinning it would be meaningless.
     if (view === "net") this.autoRotate = false;
+    if (view === "cubes") this.enterCubes();
+    // An entry the cube view refused may be fine for the others, but it was
+    // never applied: show what the shape actually is rather than apply it now.
+    if (leaving === "cubes") {
+      this.cubeRun = null;
+      this.drafts = draftsFor(this.kind, this.dimensions);
+      this.errors = {};
+    }
+  }
+
+  /**
+   * Make the solid one that whole unit cubes fill, and show it full. The edges
+   * are rounded and capped where everyone can see it — in the dimension bar —
+   * and stay that way after leaving the cube view.
+   */
+  private enterCubes() {
+    const fitted = Object.fromEntries(
+      Object.entries(this.dimensions).map(([key, value]) => [
+        key,
+        toCubeEdge(value),
+      ]),
+    );
+    this.dimensionsByKind = { ...this.dimensionsByKind, [this.kind]: fitted };
+    this.drafts = draftsFor(this.kind, fitted);
+    this.errors = {};
+    this.cubeRun = null;
+    this.fill = this.cubeTotal;
   }
 
   /** Apply a draft. Invalid drafts record an error and leave geometry untouched. */
@@ -169,11 +222,19 @@ export class LabState {
       this.errors = { ...this.errors, [key]: parsed.message };
       return;
     }
+    if (this.view === "cubes" && !isCubeEdge(parsed.value)) {
+      this.errors = { ...this.errors, [key]: CUBE_EDGE_MESSAGE };
+      return;
+    }
     this.errors = { ...this.errors, [key]: null };
+    const wasFull = this.fill >= this.cubeTotal;
     this.dimensionsByKind = {
       ...this.dimensionsByKind,
       [this.kind]: { ...this.dimensionsByKind[this.kind], [key]: parsed.value },
     };
+    // A full solid stays full and an empty one empty; a part-filled one keeps
+    // its count, which flows into the new rows. Cubes the solid gains lie flat.
+    this.fill = wasFull ? this.cubeTotal : Math.min(this.fill, this.cubeTotal);
   }
 
   /** Step a dimension by whole increments, keeping it inside the valid range. */
@@ -218,6 +279,47 @@ export class LabState {
 
   clearPins() {
     this.pinned = [];
+  }
+
+  /** Move cubes by hand, one at a time. Stops anything already moving them. */
+  stepCubes(delta: number) {
+    this.cubeRun = null;
+    this.setFill(this.fill + delta);
+  }
+
+  /**
+   * Set cubes moving on their own. With `instant`, a whole-layer run lands at
+   * once instead, for a viewer who has asked for reduced motion.
+   */
+  runCubes(run: CubeRun, instant = false) {
+    const goal = run === "flatten" ? 0 : this.cubeTotal;
+    if (this.fill === goal) return;
+    if (instant && run !== "play") {
+      this.cubeRun = null;
+      this.setFill(goal);
+      return;
+    }
+    this.cubeRun = run;
+  }
+
+  pauseCubes() {
+    this.cubeRun = null;
+  }
+
+  /** One tick of a run: `steps` cubes, or `steps` layers when `byLayer`. */
+  advanceCubes(steps = 1, byLayer = false) {
+    const run = this.cubeRun;
+    if (!run || !this.cubes) return;
+    this.setFill(advanceFill(this.fill, this.cubes, run, steps, byLayer));
+    const goal = run === "flatten" ? 0 : this.cubeTotal;
+    if (this.fill === goal) this.cubeRun = null;
+  }
+
+  private setFill(fill: number) {
+    this.fill = Math.max(0, Math.min(this.cubeTotal, fill));
+    // Everything lying flat is a long strip on the floor: like a net, it is
+    // there to be read, not spun.
+    if (this.fill === 0) this.autoRotate = false;
   }
 
   toggleAnswers() {

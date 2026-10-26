@@ -17,6 +17,16 @@ See [requirements.md](requirements.md) for the product decisions and proposed de
 - **Net:** An arrangement of flat surface pieces that can form the solid. The sphere has no exact distortion-free net.
 - **View orientation:** Rotation of the representation, independent of the solid's geometry.
 - **Answer visibility:** Whether evaluated final results are shown. It does not change the underlying calculations.
+- **Unit cube:** A cube whose edges are one unit long in the chosen measurement unit. Only rectangular prisms and cubes
+  with whole-number edges are shown built from unit cubes. _Avoid:_ block, voxel.
+- **Row:** A line of unit cubes running along the solid's length.
+- **Layer:** A one-cube-high slab of rows covering the solid's base. A solid of height h has h layers. _Avoid:_ slice,
+  level.
+- **Flat arrangement:** The solid's layers laid end to end along its length, making one layer h times as long as the
+  base. It has the same unit cubes, and so the same volume, as the stacked solid. _Avoid:_ unstacked, spread.
+- **Fill:** How many of the solid's unit cubes are stacked in it; every other cube lies in the flat arrangement. Empty
+  means all are flat and full means all are stacked. Cubes are stacked one at a time, along a row, row by row across a
+  layer, and layer by layer upward. _Avoid:_ placed, added: cubes are never created or removed, only moved.
 
 ## Solid definitions and formulas
 
@@ -98,13 +108,14 @@ Finite decimal inputs represent exact decimal quantities for expression formatti
 
 ### Presentation state
 
-- Solid or net view.
+- Solid, cubes or net view.
 - 3D orientation and auto-rotation preference.
+- Fill: how many unit cubes are stacked, and whether they are moving on their own.
 - Selected surface identifier or no selection.
 - Measurement-unit label.
 - Answer visibility.
 
-These do not alter the physical calculations. Switching shape clears incompatible surface selection and resets orientation to a useful view. Switching to the sphere uses its solid view and explains why a net is unavailable. Answer visibility survives shape and view changes.
+These do not alter the physical calculations. Switching shape clears incompatible surface selection and resets orientation to a useful view. Switching to the sphere uses its solid view and explains why a net is unavailable. Switching to a solid other than a rectangular prism or cube from the cubes view returns to the solid view. Entering the cubes view is the one view change that alters geometry: it rounds each edge to a whole number from 1 to 10 and fills the solid. Answer visibility survives shape and view changes.
 
 ## Invariants and verification
 
@@ -117,6 +128,7 @@ These do not alter the physical calculations. Switching shape clears incompatibl
 7. A cone sector's arc length equals its base circumference and its area equals the curved side's area.
 8. A rectangular prism's, cube's, or triangular prism's net preserves all surface dimensions and joining-edge lengths.
 9. Rotation, highlighting, unit-label changes, and view changes do not alter numeric geometry.
-10. Hidden final answers do not appear in rendered text, accessibility descriptions, tooltips, or net labels. Formula substitutions intentionally remain visible.
+10. Hidden final answers do not appear in rendered text, accessibility descriptions, tooltips, or net labels. Formula substitutions intentionally remain visible. In the cubes view this includes the cube count and the flat arrangement's evaluated length.
+11. The cubes view always shows exactly as many unit cubes as the volume, each either stacked or in the flat arrangement.
 
-Test the pure geometry and exact-expression model independently from rendering. Browser tests should cover dimension edits and validation, all seven shape selections and the unlisted logo solid, solid/net switching, surface selection, answer reveal persistence, keyboard rotation, and a narrow viewport.
+Test the pure geometry and exact-expression model independently from rendering. Browser tests should cover dimension edits and validation, all seven shape selections and the unlisted logo solid, solid/net switching, the cubes view, surface selection, answer reveal persistence, keyboard rotation, and a narrow viewport.

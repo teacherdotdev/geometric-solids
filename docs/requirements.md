@@ -22,7 +22,7 @@ The originating teacher request was for a rotating 3D shape app with editable le
 | Nets | Toggle between a solid and its accurately scaled flat net, not animated unfolding or side-by-side views |
 | Triangular prism | Right-triangle base; enter both perpendicular legs and prism length |
 | π | Show exact π expressions and an approximate decimal using calculator π, not 3.14 |
-| Volume visualization | Unit-cube fills and cross-sectional layer animations are not part of the selected launch scope |
+| Volume visualization | A Cubes view shows a rectangular prism or cube as unit cubes that move between the solid and a flat arrangement of its layers (added after launch at a teacher's request; see [Show a solid in unit cubes](#show-a-solid-in-unit-cubes)) |
 | Textbook workflow | Let the teacher float the interactive lab above a textbook in another tab |
 
 ## Proposed defaults
@@ -76,6 +76,22 @@ These are implementation recommendations, not separately confirmed requirements.
 - A sphere cannot have an exact flat net without distortion. Explain this explicitly; do not display a misleading net. Its 3D view and calculations remain available.
 - Auto-rotation does not run while showing a net.
 
+### Show a solid in unit cubes
+
+Students build their sense of volume by counting unit cubes, and adjustable
+pictures of the same solid whole and in cubes are hard to come by.
+
+- A **Cubes** tab sits between Solid and Net. It is offered only for the rectangular prism and the cube, which whole unit cubes fill exactly; on any other solid it is greyed out with a one-line reason, and choosing such a solid while in Cubes returns to the Solid view.
+- Entering Cubes rounds each edge to the nearest whole number (halves up, at least 1) and caps it at 10, visibly in the dimension bar. The change stays after leaving. While in Cubes, the dimension controls step by 1 and a typed edge that is not a whole number from 1 to 10 is refused with an input error.
+- Exactly V unit cubes are on screen at all times. Each is either stacked in the solid or lying in the **flat arrangement**: the solid's layers laid end to end along its length, beside the solid after a one-unit gap, making one layer h·l long and w wide. A faint outline of the solid and a faint footprint of the flat arrangement are always shown.
+- The fill — how many cubes are stacked — starts full. Controls, left to right: all flat, one cube out, play/pause, one cube in, all stacked. Play moves cubes into the solid one at a time along a row, row by row across a layer, then layer by layer upward, at about 4 per second, faster for a big solid so a full fill takes no more than about 20 seconds. All flat and all stacked move whole layers over about 1.5 seconds. With reduced motion, play moves a layer per step and all flat/all stacked land at once.
+- Layers alternate between two shades in both arrangements, so a layer can be recognised after it moves.
+- The solid's edges are labelled l, w and h (s for a cube); the flat arrangement's w and h × l, with the evaluated length only while answers are visible.
+- While answers are visible, a count reads "24 of 60 unit cubes stacked". While they are hidden there is no count, no total and no evaluated flat length anywhere, including accessible descriptions.
+- Both totals stay in their corner. Surface badges and surface measurement are not shown. The floor grid is fixed at one unit, so each square is one cube's footprint.
+- Drag, keyboard rotation and reset work as in the Solid view. Auto-rotation is turned off, and unavailable, while every cube lies flat.
+- Changing a dimension keeps a full solid full and an empty one empty; a part-filled solid keeps its count, capped at the new total. Coming back to Cubes starts full.
+
 ### Float over a textbook
 
 - A `Float` control opens the complete interactive lab in a browser-managed, always-on-top window so the teacher can switch to a textbook tab without losing the lab.
@@ -104,6 +120,8 @@ These are implementation recommendations, not separately confirmed requirements.
 - Entering an empty, zero, negative, out-of-range, or nonfinite dimension never produces a malformed solid or NaN result. Show an input error and retain the last valid geometry.
 - Changing shape or view while answers are hidden does not reveal a final result.
 - Floating the lab, changing a dimension there, and returning it to the tab preserves the changed geometry and results.
+- A 3 × 4 × 5 rectangular prism in Cubes shows 60 unit cubes; laid flat they form one 15 × 4 layer of the same 60 cubes.
+- Entering Cubes with a 3.5 × 40 × 5 prism changes it to 4 × 10 × 5, which shows 200 cubes.
 - Every essential action can be performed without a mouse.
 
 ## Implementation constraints
@@ -117,14 +135,16 @@ Built as a single prerendered SvelteKit page.
 - `src/lib/domain/` holds the pure model: exact rational/radical/π arithmetic
   (`rational.ts`, `exact.ts`), the seven picker solids and their surface decomposition
   (`solids.ts`), 3D meshes and measurable edges (`geometry3d.ts`), net layouts
-  (`nets.ts`), input validation (`validation.ts`), and unit labels
+  (`nets.ts`), unit-cube layout and fill steps (`unitCubes.ts`), input
+  validation (`validation.ts`), and unit labels
   (`format.ts`). None of it imports Svelte, and it is covered by
   `src/lib/domain/*.test.ts`.
 - `src/lib/state/lab.svelte.ts` keeps geometry, input drafts, and presentation
   state separate, as described in [domain-model.md](domain-model.md). What is
   being measured is a hovered or pinned _target_: one surface, or one length
   that every edge carrying it responds to.
-- `src/lib/components/` renders the solid and the net as accessible SVG. The
+- `src/lib/components/` renders the solid, its unit cubes (`CubeView.svelte`)
+  and the net as accessible SVG. The
   shape fills the screen; four small panels float over it — the solid picker
   top left, the view, unit, and floating-window controls top right, the
   dimensions bottom left, and the two totals bottom right. `ShapeLab.svelte`
