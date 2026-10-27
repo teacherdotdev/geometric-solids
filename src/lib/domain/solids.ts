@@ -32,6 +32,7 @@ import {
   type SolidKind,
   type SolidModel,
   type SurfaceTerm,
+  type ViewMode,
 } from "./types";
 
 export interface SolidDefinition {
@@ -790,6 +791,22 @@ export const SOLIDS: Record<SolidKind, SolidDefinition> = {
     build: logoSlab,
   },
 };
+
+/**
+ * Whether a solid can be shown in a view. Every solid can be shown whole; the
+ * other views each hold only for the solids they are exact for, and this is
+ * the one place that says which.
+ */
+export function offersView(kind: SolidKind, view: ViewMode): boolean {
+  switch (view) {
+    case "solid":
+      return true;
+    case "cubes":
+      return SOLIDS[kind].hasCubes;
+    case "net":
+      return SOLIDS[kind].hasNet;
+  }
+}
 
 export function buildSolid(
   kind: SolidKind,

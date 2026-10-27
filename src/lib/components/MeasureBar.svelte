@@ -1,6 +1,7 @@
 <script lang="ts">
   import Approximation from "$lib/components/Approximation.svelte";
   import MathText from "$lib/components/MathText.svelte";
+  import NumberField from "$lib/components/NumberField.svelte";
   import { evalExact, formatExact } from "$lib/domain/exact";
   import {
     DIMENSION_MAX,
@@ -43,14 +44,6 @@
   const highest = $derived(inCubes ? CUBE_EDGE_MAX : DIMENSION_TYPED_MAX);
   const sliderMax = $derived(inCubes ? CUBE_EDGE_MAX : DIMENSION_MAX);
 
-  const step =
-    "grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-md border border-rule bg-panel text-base leading-none font-bold text-ink-soft hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-30";
-  /**
-   * Once the window is too narrow to hold a whole row, the two nudge buttons
-   * are the part that goes: the typed box beside them does the same job, and
-   * the shape needs the room more than they do.
-   */
-  const stepClass = $derived(compact ? `${step} max-[30rem]:hidden` : step);
   /**
    * The working for a derived length — "s = √(4² + (6/2)²) = 5" — goes at the
    * same point, and for the same reason. It is the longest line in the panel
@@ -144,66 +137,21 @@
             onclick={() => lab.togglePin(target)}>{spec.key}</button
           >
 
-          <button
-            type="button"
-            class={stepClass}
-            aria-label={t("measure.decrease", {
-              label: domainText(spec.label),
-              step: nudge,
-            })}
-            data-testid="decrease-{spec.key}"
-            disabled={lab.dimensions[spec.key] <= lowest}
-            onclick={() => lab.nudgeDimension(spec.key, -nudge)}>−</button
-          >
-          <label class="sr-only" for="dimension-{spec.key}"
-            >{t("measure.inUnit", {
-              label: domainText(spec.label),
-              unit: linear,
-            })}</label
-          >
-          <input
+          <NumberField
             id="dimension-{spec.key}"
-            data-testid="input-{spec.key}"
-            class="shrink-0 rounded-md border bg-panel px-1 py-0.5 text-center font-mono {compact
-              ? 'w-12 text-sm max-[26rem]:w-10 max-[26rem]:text-xs'
-              : 'w-16 text-base'} {error ? 'border-flag' : 'border-rule'}"
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? `error-${spec.key}` : undefined}
-            value={lab.drafts[spec.key]}
-            oninput={(event) =>
-              lab.setDraft(spec.key, event.currentTarget.value)}
-          />
-          <button
-            type="button"
-            class={stepClass}
-            aria-label={t("measure.increase", {
-              label: domainText(spec.label),
-              step: nudge,
-            })}
-            data-testid="increase-{spec.key}"
-            disabled={lab.dimensions[spec.key] >= highest}
-            onclick={() => lab.nudgeDimension(spec.key, nudge)}>+</button
-          >
-          <!-- The slider only covers the sizes that read well on screen. A typed
-             value may be far larger; the handle then rests at the top of the
-             slider until it is dragged back into that range. -->
-          <input
-            class={compact ? "hidden" : "hidden w-28 accent-accent sm:block"}
-            type="range"
-            min={lowest}
-            max={sliderMax}
+            testKey={spec.key}
+            label={domainText(spec.label)}
+            unit={linear}
+            value={lab.dimensions[spec.key]}
+            draft={lab.drafts[spec.key]}
+            {error}
             step={nudge}
-            data-testid="range-{spec.key}"
-            aria-label={t("measure.slider", {
-              label: domainText(spec.label),
-              unit: linear,
-            })}
-            value={Math.min(lab.dimensions[spec.key], sliderMax)}
-            oninput={(event) =>
-              lab.setDraft(spec.key, event.currentTarget.value)}
+            {lowest}
+            {highest}
+            {sliderMax}
+            {compact}
+            onDraft={(raw) => lab.setDraft(spec.key, raw)}
+            onNudge={(delta) => lab.nudgeDimension(spec.key, delta)}
           />
         </div>
 

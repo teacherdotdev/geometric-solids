@@ -10,8 +10,13 @@ import { type UnitKey } from "$lib/domain/format";
 import { buildEdges, buildMesh } from "$lib/domain/geometry3d";
 import { buildNet } from "$lib/domain/nets";
 import { fromTenths } from "$lib/domain/rational";
-import { SOLIDS, buildSolid, defaultDimensions } from "$lib/domain/solids";
-import type { Dimensions, SolidKind } from "$lib/domain/types";
+import {
+  SOLIDS,
+  buildSolid,
+  defaultDimensions,
+  offersView,
+} from "$lib/domain/solids";
+import type { Dimensions, SolidKind, ViewMode } from "$lib/domain/types";
 import {
   CUBE_EDGE_MESSAGE,
   advanceFill,
@@ -24,7 +29,7 @@ import {
 import { dimensionToDraft, parseDimension } from "$lib/domain/validation";
 import { surfaceHue } from "$lib/ui/colors";
 
-export type ViewMode = "solid" | "cubes" | "net";
+export type { ViewMode };
 
 /**
  * What the pointer is on, or what has been pinned. A surface target names one
@@ -161,6 +166,11 @@ export class LabState {
     return this.pinned.includes(target);
   }
 
+  /** Whether the current solid can be shown in a view. */
+  offers(view: ViewMode): boolean {
+    return offersView(this.kind, view);
+  }
+
   selectKind(kind: SolidKind) {
     if (kind === this.kind) return;
     this.kind = kind;
@@ -170,17 +180,12 @@ export class LabState {
     this.pinned = [];
     this.hovered = null;
     this.resetView();
-    if (!SOLIDS[kind].hasNet && this.view === "net") this.view = "solid";
-    if (this.view === "cubes") {
-      if (SOLIDS[kind].hasCubes) this.enterCubes();
-      else this.view = "solid";
-    }
+    if (!offersView(kind, this.view)) this.view = "solid";
+    if (this.view === "cubes") this.enterCubes();
   }
 
   setView(view: ViewMode) {
-    if (view === "net" && !this.definition.hasNet) return;
-    if (view === "cubes" && !this.definition.hasCubes) return;
-    if (view === this.view) return;
+    if (!offersView(this.kind, view) || view === this.view) return;
     const leaving = this.view;
     this.view = view;
     // A net is flat; spinning it would be meaningless.
