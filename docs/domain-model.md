@@ -27,6 +27,20 @@ See [requirements.md](requirements.md) for the product decisions and proposed de
 - **Fill:** How many of the solid's unit cubes are stacked in it; every other cube lies in the flat arrangement. Empty
   means all are flat and full means all are stacked. Cubes are stacked one at a time, along a row, row by row across a
   layer, and layer by layer upward. _Avoid:_ placed, added: cubes are never created or removed, only moved.
+- **Bottom face:** The face a solid stands on, which slice directions are measured against. It is the base for every
+  solid except the triangular prism, which stands on its leg-a rectangle; its bases are its two triangles. The sphere
+  has no bottom face, only a lowest point.
+- **Cutting plane:** The flat plane that slices a solid, drawn see-through on it. _Avoid:_ knife, blade.
+- **Slice:** A cut through a solid by a cutting plane, chosen by its slice direction and slice position. _Avoid:_
+  layer, which is a one-cube-high slab in the cubes view.
+- **Slice direction:** Horizontal (parallel to the bottom face), vertical (perpendicular to it, in one of two
+  headings) or diagonal (at 45° to it, leaning toward the front, back, left or right).
+- **Slice position:** How far the cutting plane has moved along its one axis: height above the bottom face, distance
+  in from the side, or, for a diagonal, how far it has slid from where it first touches the solid.
+- **Cross section:** The flat region where the cutting plane meets the solid. It is not a surface of the solid and adds
+  nothing to the surface area. _Avoid:_ slice face, section.
+- **Cross-section drawing:** The cross section seen face-on, on the net's scale and unit grid, carrying its name, side
+  lengths and area.
 
 ## Solid definitions and formulas
 
@@ -78,6 +92,37 @@ All pieces in a net share one linear scale. Fitting the whole net into the viewp
 
 Curved surfaces may be tessellated for rendering. Their displayed area and volume formulas remain analytic, not mesh-based approximations.
 
+## Cross sections
+
+A cross section is computed from the solid's dimensions and the slice, never measured off the drawn mesh. Polyhedra
+(rectangular prism, cube, triangular prism, square pyramid) give polygons; the cylinder, cone and sphere give circles,
+ellipses, or regions bounded by part of a conic and a straight edge.
+
+Directions are measured against the bottom face. A diagonal is always 45°, so each of its points rises one unit for each
+unit it runs: every polygon vertex on a polyhedron has rational coordinates whenever the dimensions and position do, and
+its side lengths and area are exact, carrying at most a factor of √2 from the tilt.
+
+The slice position runs over the open range in which the plane passes through the solid's interior. Both ends, where
+the plane only touches the solid at a point, an edge or a face, are excluded, so a cross section always has positive
+area.
+
+| Solid | Horizontal | Vertical | Diagonal |
+| --- | --- | --- | --- |
+| Rectangular prism, cube | Rectangle (square) equal to the bottom face | Rectangle (square) | Rectangle: a plane leaning toward a side contains the edges running across it |
+| Right-triangular prism | Rectangle of a(1 − y/b) by p at height y | Across the length: the right triangle a, b, c. Along it: a rectangle | Leaning across the length: rectangle. Leaning along it: trapezoid, or triangle once it reaches the top edge |
+| Square pyramid | Square of side b(1 − y/h) at height y | Isosceles triangle through the tip; trapezoid off it | Trapezoid |
+| Cylinder | Circle of radius r | Rectangle of width 2√(r² − d²) and height h, d from the axis | Ellipse with axes 2r and 2√2·r while it misses both disks; part of an ellipse once it cuts one |
+| Cone | Circle of radius r(1 − y/h) | Isosceles triangle through the tip; hyperbola region off it | Ellipse when h > r, or part of an ellipse once it cuts the base disk; parabola region when h = r; hyperbola region when h < r |
+| Sphere | Circle of radius √(r² − d²), d from the centre | — | — |
+
+So with these slice directions every polygonal cross section is a rectangle, square, triangle or trapezoid; no slice
+gives a pentagon or hexagon. Naming uses the most specific correct name: square over rectangle; equilateral, isosceles
+or right triangle over triangle; trapezoid; circle, ellipse, part of an ellipse, parabola region, hyperbola region.
+
+Area uses the standard formula, with substitution, as surfaces do: lw, s², ½bh, ½(b₁ + b₂)h, πr², πab. A parabola region has area ⅔wh for width w and
+height h (Archimedes). Part of an ellipse and a hyperbola region have no formula at this level: their area is computed
+numerically and shown as approximate only, never as exact. Every other area and length is exact.
+
 ## Exact and approximate values
 
 Keep mathematical expressions distinct from formatted numbers.
@@ -108,14 +153,15 @@ Finite decimal inputs represent exact decimal quantities for expression formatti
 
 ### Presentation state
 
-- Solid, cubes or net view.
+- Solid, cubes, net or slice view.
+- Slice direction, heading and slice position.
 - 3D orientation and auto-rotation preference.
 - Fill: how many unit cubes are stacked, and whether they are moving on their own.
-- Selected surface identifier or no selection.
+- Selected surface identifier, cross-section edge or cross section, or no selection.
 - Measurement-unit label.
 - Answer visibility.
 
-These do not alter the physical calculations. Switching shape clears incompatible surface selection and resets orientation to a useful view. Switching to the sphere uses its solid view and explains why a net is unavailable. Switching to a solid other than a rectangular prism or cube from the cubes view returns to the solid view. Entering the cubes view is the one view change that alters geometry: it rounds each edge to a whole number from 1 to 10 and fills the solid. Answer visibility survives shape and view changes.
+These do not alter the physical calculations. Switching shape clears incompatible surface selection and resets orientation to a useful view. Switching to the sphere uses its solid view and explains why a net is unavailable. Switching to a solid other than a rectangular prism or cube from the cubes view returns to the solid view. Switching to the logo solid from the slice view returns to the solid view; switching between picker solids keeps the slice direction and pulls the slice position back into range. Entering the cubes view is the one view change that alters geometry: it rounds each edge to a whole number from 1 to 10 and fills the solid. Answer visibility survives shape and view changes.
 
 ## Invariants and verification
 
@@ -128,7 +174,12 @@ These do not alter the physical calculations. Switching shape clears incompatibl
 7. A cone sector's arc length equals its base circumference and its area equals the curved side's area.
 8. A rectangular prism's, cube's, or triangular prism's net preserves all surface dimensions and joining-edge lengths.
 9. Rotation, highlighting, unit-label changes, and view changes do not alter numeric geometry.
-10. Hidden final answers do not appear in rendered text, accessibility descriptions, tooltips, or net labels. Formula substitutions intentionally remain visible. In the cubes view this includes the cube count and the flat arrangement's evaluated length.
+10. Hidden final answers do not appear in rendered text, accessibility descriptions, tooltips, or net labels. Formula substitutions intentionally remain visible. In the cubes view this includes the cube count and the flat arrangement's evaluated length. In the slice view it includes the cross section's name and evaluated area; its side lengths stay visible.
 11. The cubes view always shows exactly as many unit cubes as the volume, each either stacked or in the flat arrangement.
+12. Slicing never changes a solid's dimensions, surface area or volume.
+13. Every in-range slice position gives a cross section of positive, finite area; neither end of the range is offered.
+14. A horizontal slice of a rectangular prism, cube or cylinder equals its bottom face at every height. A horizontal slice of a square pyramid at height y is a square of side b(1 − y/h); of a cone, a circle of radius r(1 − y/h).
+15. A cross section's area equals the area enclosed by its outline, and its side lengths equal the lengths of the matching segments of the outline drawn on the solid.
+16. Doubling every dimension and the slice position doubles every cross-section length and multiplies its area by 4.
 
-Test the pure geometry and exact-expression model independently from rendering. Browser tests should cover dimension edits and validation, all seven shape selections and the unlisted logo solid, solid/net switching, the cubes view, surface selection, answer reveal persistence, keyboard rotation, and a narrow viewport.
+Test the pure geometry and exact-expression model independently from rendering. Browser tests should cover dimension edits and validation, all seven shape selections and the unlisted logo solid, solid/net switching, the cubes view, the slice view, surface selection, answer reveal persistence, keyboard rotation, and a narrow viewport.

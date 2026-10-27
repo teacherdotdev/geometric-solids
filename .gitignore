@@ -20,3 +20,6 @@ playwright-report
 # Agent worktrees, checked out inside the project
 .claude/worktrees/
 
+
+# Specs and tickets, kept out of the repo
+.scratch/
