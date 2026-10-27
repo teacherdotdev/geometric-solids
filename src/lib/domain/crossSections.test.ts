@@ -562,3 +562,114 @@ describe("slices of a sphere", () => {
     expect(cutSolid("sphere", { r: 3 }, horizontal(6))).toBeNull();
   });
 });
+
+describe("slices of a cone", () => {
+  const CONE = { r: 3, h: 4 };
+
+  it("give circles of radius r(1 − y/h) as they rise", () => {
+    const section = cut("cone", CONE, horizontal(2));
+    expect(section.name).toBe("Circle");
+    expect(formatExact(section.lines[0].length)).toBe("1.5");
+    expect(formatExact(section.area.exact!)).toBe("2.25π");
+  });
+
+  it("give an isosceles triangle through the tip, and a hyperbola region off it", () => {
+    const tip = cut("cone", CONE, sliceOf("frontToBack", 3));
+    expect(tip.name).toBe("Isosceles triangle");
+    expect(lengths("cone", CONE, sliceOf("frontToBack", 3))).toEqual([
+      "5",
+      "5",
+      "6",
+    ]);
+    expect(formatExact(tip.area.exact!)).toBe("12");
+
+    const off = cut("cone", CONE, sliceOf("sideToSide", 1));
+    expect(off.name).toBe("Hyperbola region");
+    expect(off.area.exact).toBeNull();
+    expect(lengths("cone", CONE, sliceOf("sideToSide", 1))).toEqual(["2√5"]);
+    expect(formatExact(off.lines[0].length)).toBe("4/3");
+  });
+
+  it("give an ellipse on a diagonal when the cone is steeper than 45°", () => {
+    const section = cut("cone", CONE, sliceOf("right", 1));
+    expect(section.name).toBe("Ellipse");
+    expect(section.lines.map((line) => formatExact(line.length))).toEqual([
+      "3√7/7",
+      "12√2/7",
+    ]);
+    expect(formatExact(section.area.exact!)).toBe("36√14π/49");
+    // Further across, the cut runs into the base.
+    const part = cut("cone", CONE, sliceOf("right", 3));
+    expect(part.name).toBe("Part of an ellipse");
+    expect(part.area.exact).toBeNull();
+    expect(lengths("cone", CONE, sliceOf("right", 3))).toEqual(["4√2"]);
+  });
+
+  it("give a parabola region, worked out exactly, when the cone is at 45°", () => {
+    const section = cut("cone", { r: 2, h: 2 }, sliceOf("right", 2));
+    expect(section.name).toBe("Parabola region");
+    expect(section.area.formula).toBe("A = 2wh / 3");
+    expect(section.area.substitution).toBe("A = 2 × 4 × √2 / 3");
+    expect(formatExact(section.area.exact!)).toBe("8√2/3");
+  });
+
+  it("give a hyperbola region when the cone is flatter, and a triangle through its tip", () => {
+    const section = cut("cone", { r: 4, h: 2 }, sliceOf("right", 3));
+    expect(section.name).toBe("Hyperbola region");
+    expect(section.area.exact).toBeNull();
+
+    const tip = cut("cone", { r: 4, h: 2 }, sliceOf("right", 2));
+    expect(tip.name).toBe("Isosceles triangle");
+    expect(lengths("cone", { r: 4, h: 2 }, sliceOf("right", 2))).toEqual([
+      "2√5",
+      "2√5",
+      "4√3",
+    ]);
+    expect(formatExact(tip.area.exact!)).toBe("4√6");
+  });
+
+  it("give the same cross section on every diagonal", () => {
+    for (const d of [CONE, { r: 2, h: 2 }, { r: 4, h: 2 }]) {
+      const areas = (["right", "back", "left", "front"] as const).map(
+        (heading) => cut("cone", d, sliceOf(heading, 2.5)).area.approximate,
+      );
+      for (const area of areas) expect(area).toBeCloseTo(areas[0], 9);
+    }
+  });
+
+  it("has an area close to what its drawn outline encloses", () => {
+    for (const d of [CONE, { r: 2, h: 2 }, { r: 4, h: 2 }]) {
+      for (const heading of [
+        "level",
+        "frontToBack",
+        "right",
+        "back",
+      ] as const) {
+        const span = toNumber(sliceSpan("cone", d, heading)!);
+        for (let tenths = 1; tenths < span * 10; tenths += 3) {
+          const section = cut("cone", d, sliceOf(heading, tenths / 10));
+          expect(section.area.approximate).toBeGreaterThan(0);
+          expect(
+            section.area.approximate / enclosed(section.outline2d),
+          ).toBeCloseTo(1, 1);
+        }
+      }
+    }
+  });
+
+  it("never call a rounded area exact", () => {
+    for (const d of [CONE, { r: 2, h: 2 }, { r: 4, h: 2 }]) {
+      for (const heading of ["frontToBack", "right"] as const) {
+        const span = toNumber(sliceSpan("cone", d, heading)!);
+        for (let tenths = 1; tenths < span * 10; tenths += 1) {
+          const section = cut("cone", d, sliceOf(heading, tenths / 10));
+          const rounded = ["partOfEllipse", "hyperbolaRegion"].includes(
+            section.shape,
+          );
+          expect(section.area.exact === null).toBe(rounded);
+          expect(section.area.formula === null).toBe(rounded);
+        }
+      }
+    }
+  });
+});

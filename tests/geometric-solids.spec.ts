@@ -652,6 +652,53 @@ test("slices a cylinder into an ellipse, or part of one with a rounded area", as
   await expect(page.getByTestId("section-formula")).toHaveCount(0);
 });
 
+test("offers a slice of every solid in the picker", async ({ page }) => {
+  for (const { kind } of SOLIDS) {
+    await page.getByTestId(`shape-${kind}`).click();
+    await expect(page.getByTestId("view-slice")).toBeEnabled();
+  }
+  await page.getByTestId("brand-toggle").click();
+  await expect(page.getByTestId("view-slice")).toBeDisabled();
+});
+
+test("slices a cone into the conics, by how steep it is", async ({ page }) => {
+  await page.getByTestId("shape-cone").click();
+  await page.getByTestId("view-slice").click();
+
+  // Straight down through the tip of a cone with radius 3 and height 4.
+  await page.getByTestId("slice-vertical").click();
+  await page.getByTestId("input-slice-position").fill("3");
+  await expect(page.getByTestId("section-name")).toHaveText(
+    "Isosceles triangle",
+  );
+  expect(await sectionSides(page)).toEqual(["5", "5", "6"]);
+  // Off the tip, a hyperbola region, with its area rounded.
+  await page.getByTestId("input-slice-position").fill("1");
+  await expect(page.getByTestId("section-name")).toHaveText("Hyperbola region");
+  await expect(page.getByTestId("section-beyond-course")).toBeVisible();
+
+  // Steeper than 45°: an ellipse.
+  await page.getByTestId("slice-diagonal").click();
+  await page.getByTestId("input-slice-position").fill("1");
+  await expect(page.getByTestId("section-name")).toHaveText("Ellipse");
+
+  // Exactly 45°: a parabola region, whose area Archimedes worked out exactly.
+  await page.getByTestId("input-r").fill("2");
+  await page.getByTestId("input-h").fill("2");
+  await page.getByTestId("input-slice-position").fill("2");
+  await expect(page.getByTestId("section-name")).toHaveText("Parabola region");
+  await page.getByTestId("section-card").hover();
+  await expect(page.getByTestId("section-formula")).toContainText(
+    "A = 2wh / 3",
+  );
+  await expect(page.getByTestId("section-area")).toContainText("8√2/3");
+
+  // Flatter than 45°: a hyperbola region.
+  await page.getByTestId("input-r").fill("4");
+  await page.getByTestId("input-slice-position").fill("3");
+  await expect(page.getByTestId("section-name")).toHaveText("Hyperbola region");
+});
+
 test("measures the cross section from the keyboard alone", async ({ page }) => {
   await page.getByTestId("view-slice").click();
 

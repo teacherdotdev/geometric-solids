@@ -244,7 +244,10 @@ const FRAMES: Record<SliceHeading, PlaneFrame> = {
     across: [1, 0, 0],
     up: [0, 1, 0],
   },
-  // Each diagonal is seen square-on from above it, uphill at the top.
+  // Each diagonal is seen square-on from above it, uphill at the top. The four
+  // are quarter turns of one another: each slides the way it rises, starting
+  // from the side it rises away from, so a round solid gives the same cut at
+  // the same position whichever way the slice is turned.
   right: {
     normal: [1, -1, 0],
     slide: [1, 0, 0],
@@ -252,8 +255,8 @@ const FRAMES: Record<SliceHeading, PlaneFrame> = {
     up: [1, 1, 0],
   },
   left: {
-    normal: [1, 1, 0],
-    slide: [1, 0, 0],
+    normal: [-1, -1, 0],
+    slide: [-1, 0, 0],
     across: [0, 0, -1],
     up: [-1, 1, 0],
   },
@@ -264,8 +267,8 @@ const FRAMES: Record<SliceHeading, PlaneFrame> = {
     up: [0, 1, 1],
   },
   back: {
-    normal: [0, 1, 1],
-    slide: [0, 0, 1],
+    normal: [0, -1, -1],
+    slide: [0, 0, -1],
     across: [1, 0, 0],
     up: [0, 1, -1],
   },
@@ -363,6 +366,7 @@ export function slicesSolid(kind: SolidKind): boolean {
     kind === "triangularPrism" ||
     kind === "squarePyramid" ||
     kind === "cylinder" ||
+    kind === "cone" ||
     kind === "sphere"
   );
 }
@@ -879,12 +883,26 @@ function roundSpan(
   heading: SliceHeading,
 ): Rational | null {
   if (kind === "sphere") return mul(r(d, "r"), rational(2));
-  if (kind !== "cylinder") return null;
+  if (kind !== "cylinder" && kind !== "cone") return null;
   const [radius, height] = [r(d, "r"), r(d, "h")];
   const across = mul(radius, rational(2));
   if (heading === "level") return height;
   if (heading === "frontToBack" || heading === "sideToSide") return across;
-  return add(across, height);
+  if (kind === "cylinder") return add(across, height);
+  // A cone's diagonal runs from wherever it first touches — the tip, or the
+  // rim of a cone flatter than 45° — to the far side of the rim.
+  return compare(height, radius) < 0 ? across : add(radius, height);
+}
+
+/**
+ * Where a cone's diagonal plane starts, the lowest s − y over the cone: at the
+ * tip, or at the rim for a cone flatter than the plane.
+ */
+function coneStart(radius: Rational, height: Rational) {
+  const half = mul(height, HALF);
+  const tip = mul(half, rational(-1));
+  const rim = add(half, mul(radius, rational(-1)));
+  return compare(rim, tip) < 0 ? rim : tip;
 }
 
 interface RoundGeometry {
@@ -1147,6 +1165,7 @@ function roundGeometry(
     const levelAcross = unitOf(FRAMES.level.across);
     return circleOf([0, toNumber(fromMiddle), 0], size, levelAcross, levelUp);
   }
+  if (kind === "cone") return coneGeometry(d, heading, position);
   if (kind !== "cylinder") return null;
   const [radius, height] = [r(d, "r"), r(d, "h")];
   const halfHeight = mul(height, HALF);
@@ -1180,15 +1199,11 @@ function roundGeometry(
       equals(mul(halfWidthSquared, rational(4)), mul(height, height)),
     );
   }
-  // A diagonal: the plane is s ∓ y = c along its sliding axis s. Measured from
-  // the side it first touches, the offset from the axis climbs by the
-  // position; turned to rise the same way, every diagonal is the same cut.
-  const slide: Vec3 = [frame.slide[0], frame.slide[1], frame.slide[2]];
-  const risesAlongSlide = frame.normal[1] < 0;
-  const c = add(mul(add(radius, halfHeight), rational(-1)), position);
-  // In the frame that rises along `rising`, the plane is y = s − offset.
-  const rising = risesAlongSlide ? slide : times(slide, -1);
-  const offset = risesAlongSlide ? c : mul(c, rational(-1));
+  // A diagonal rises along its sliding axis s: the plane is s − y = c, and
+  // the position carries c up from where it first touches the rim.
+  const rising: Vec3 = [frame.slide[0], frame.slide[1], frame.slide[2]];
+  // Measured along `rising`, the plane is y = s − offset.
+  const offset = add(mul(add(radius, halfHeight), rational(-1)), position);
   // Level and square to `rising`: the ellipse's short axis.
   const sideways: Vec3 = [-rising[2], 0, rising[0]];
   return cylinderDiagonal(radius, height, rising, sideways, offset);
@@ -1198,6 +1213,20 @@ function roundGeometry(
 function roundTouch(kind: SolidKind, d: Dimensions, normal: F3): Vec3 {
   const radius = toNumber(r(d, "r"));
   if (kind === "sphere") return times(unitOf(normal), -radius);
+  if (kind === "cone") {
+    // The tip, or the nearest point of the rim, or the middle of the line
+    // between them when the plane lies along the cone's side.
+    const top = toNumber(r(d, "h")) / 2;
+    const flat: F3 = [normal[0], 0, normal[2]];
+    const level = flat[0] === 0 && flat[2] === 0;
+    const rim: Vec3 = level
+      ? [0, -top, 0]
+      : plus(times(unitOf(flat), -radius), [0, -top, 0]);
+    const tip: Vec3 = [0, top, 0];
+    const [atTip, atRim] = [dotF(normal, tip), dotF(normal, rim)];
+    if (Math.abs(atTip - atRim) < 1e-9) return times(plus(tip, rim), 0.5);
+    return atTip < atRim ? tip : rim;
+  }
   const flat: F3 = [normal[0], 0, normal[2]];
   const sideways =
     flat[0] === 0 && flat[2] === 0 ? [0, 0, 0] : times(unitOf(flat), -radius);
@@ -1266,5 +1295,363 @@ function cutRound(
             rise: up,
             degrees: level ? 90 : 45,
           },
+  };
+}
+
+/**
+ * A region of a conic, q² ≤ f(s), between two values of s along the plane's
+ * uphill direction, drawn on the plane given by `place`. Lengths along s come
+ * out √2 longer on the plane than along the floor, since the plane is at 45°;
+ * a vertical plane passes `stretch` = 1.
+ */
+function conicRegion(
+  f: (s: Rational) => Rational,
+  sampled: (s: number) => number,
+  low: Rational,
+  high: Rational,
+  place: (s: number, q: number) => Vec3,
+  stretch: Exact,
+): {
+  outline: Vec3[];
+  base: { from: Vec3; to: Vec3; length: Exact } | null;
+  height: { from: Vec3; to: Vec3; length: Exact };
+  approximate: number;
+} {
+  const [lo, hi] = [toNumber(low), toNumber(high)];
+  const half = (value: number) => Math.sqrt(Math.max(0, sampled(value)));
+  const steps = 48;
+  // Bunch the samples toward the ends, where a conic turns fastest.
+  const along = Array.from({ length: steps + 1 }, (_, i) => {
+    const share = (1 - Math.cos((Math.PI * i) / steps)) / 2;
+    return lo + (hi - lo) * share;
+  });
+  const outline = [
+    ...along.map((value) => place(value, half(value))),
+    ...along
+      .slice()
+      .reverse()
+      .map((value) => place(value, -half(value))),
+  ];
+  // The area by the midpoint rule on the same bunched samples, finely.
+  let area = 0;
+  const fine = 4000;
+  for (let i = 0; i < fine; i += 1) {
+    const a = lo + ((hi - lo) * i) / fine;
+    const b = lo + ((hi - lo) * (i + 1)) / fine;
+    area += 2 * half((a + b) / 2) * (b - a);
+  }
+  const atLow = f(low);
+  const base =
+    compare(atLow, ZERO) > 0
+      ? {
+          from: place(lo, -Math.sqrt(toNumber(atLow))),
+          to: place(lo, Math.sqrt(toNumber(atLow))),
+          length: exactSqrt(mul(atLow, rational(4))),
+        }
+      : null;
+  return {
+    outline,
+    base,
+    height: {
+      from: place(lo, 0),
+      to: place(hi, 0),
+      length: mulExact(
+        exactRational(add(high, mul(low, rational(-1)))),
+        stretch,
+      ),
+    },
+    approximate: area * evalExact(stretch),
+  };
+}
+
+function coneGeometry(
+  d: Dimensions,
+  heading: SliceHeading,
+  position: Rational,
+): RoundGeometry {
+  const frame = FRAMES[heading];
+  const across = unitOf(frame.across);
+  const up = unitOf(frame.up);
+  const [radius, height] = [r(d, "r"), r(d, "h")];
+  const half = mul(height, HALF);
+  const minus = (a: Rational, b: Rational) => add(a, mul(b, rational(-1)));
+  const [rr, hh] = [toNumber(radius), toNumber(height)];
+
+  if (heading === "level") {
+    const y = toNumber(minus(position, half));
+    const size = div(mul(radius, minus(height, position)), height);
+    return circleOf([0, y, 0], exactRational(size), across, up);
+  }
+
+  if (heading === "frontToBack" || heading === "sideToSide") {
+    const normal = unitOf(frame.normal);
+    const offset = minus(position, radius);
+    if (isZero(offset)) {
+      // Straight down through the tip: an isosceles triangle.
+      const slant = exactSqrt(add(mul(radius, radius), mul(height, height)));
+      const corners: Vec3[] = [
+        plus(times(across, -rr), [0, -hh / 2, 0]),
+        plus(times(across, rr), [0, -hh / 2, 0]),
+        [0, hh / 2, 0],
+      ];
+      const base = exactRational(mul(radius, rational(2)));
+      const area = exactRational(mul(radius, height));
+      const equilateral = equals(
+        mul(mul(radius, radius), rational(4)),
+        add(mul(radius, radius), mul(height, height)),
+      );
+      return {
+        shape: equilateral ? "equilateralTriangle" : "isoscelesTriangle",
+        outline: corners,
+        edges: [
+          { from: corners[0], to: corners[1], length: base },
+          { from: corners[1], to: corners[2], length: slant },
+          { from: corners[2], to: corners[0], length: slant },
+        ],
+        lines: [
+          {
+            id: "height",
+            symbol: "h",
+            from: corners[2],
+            to: [0, -hh / 2, 0],
+            length: exactRational(height),
+            always: false,
+          },
+        ],
+        symbols: { b: "e0" },
+        area: {
+          formula: "A = bh / 2",
+          substitution: `A = ${factor(formatExact(base))} × ${factor(formatExact(exactRational(height)))} / 2`,
+          exact: area,
+          approximate: evalExact(area),
+        },
+        centre: [0, -hh / 6, 0],
+      };
+    }
+    // Off the tip: |q| ≤ √(k²(h/2 − y)² − d²), from the base up to where the
+    // cone has narrowed to the plane, y = h/2 − |d|/k.
+    const k = div(radius, height);
+    const reach = offset.n < 0n ? mul(offset, rational(-1)) : offset;
+    const f = (y: Rational) => {
+      const spread = mul(k, minus(half, y));
+      return minus(mul(spread, spread), mul(reach, reach));
+    };
+    const top = minus(half, div(reach, k));
+    const [kk, dd] = [toNumber(k), toNumber(reach)];
+    const region = conicRegion(
+      f,
+      (y) => (kk * (hh / 2 - y)) ** 2 - dd * dd,
+      mul(half, rational(-1)),
+      top,
+      (y, q) =>
+        plus(
+          times(normal, toNumber(offset)),
+          plus(times(across, q), [0, y, 0]),
+        ),
+      exactRational(rational(1)),
+    );
+    return hyperbolaOf(region);
+  }
+
+  // A diagonal. It rises along its sliding axis s, so the plane is
+  // y = s − c, and a point on it is inside the cone when
+  //   q² ≤ f(s) = k²(m − s)² − s²,  m = h/2 + c,  k = r/h,
+  // above the base (s ≥ c − h/2) and below the tip (s ≤ m). That is an
+  // ellipse when the cone is steeper than the plane (k < 1), a parabola when
+  // it is as steep (k = 1) and a hyperbola when it is flatter (k > 1).
+  const c = add(coneStart(radius, height), position);
+  const rising: Vec3 = [frame.slide[0], frame.slide[1], frame.slide[2]];
+  const sideways: Vec3 = [-rising[2], 0, rising[0]];
+  const k = div(radius, height);
+  const m = add(half, c);
+  const f = (s: Rational) => {
+    const spread = mul(k, minus(m, s));
+    return minus(mul(spread, spread), mul(s, s));
+  };
+  const place = (s: number, q: number): Vec3 =>
+    plus(times(rising, s), plus(times(sideways, q), [0, s - toNumber(c), 0]));
+  const floor = minus(c, half);
+
+  // The region is one interval of s inside [floor, m] where f ≥ 0. Its ends are
+  // among the floor, the tip and the roots of f, all rational.
+  const ones = rational(1);
+  const candidates = [floor, m];
+  if (!equals(k, ones)) {
+    candidates.push(
+      div(mul(k, m), add(k, ones)),
+      div(mul(k, m), minus(k, ones)),
+    );
+  } else {
+    candidates.push(mul(m, HALF));
+  }
+  const inside = candidates
+    .filter((value) => compare(value, floor) >= 0 && compare(value, m) <= 0)
+    .sort(compare);
+  let low = floor;
+  let high = floor;
+  for (let i = 0; i + 1 < inside.length; i += 1) {
+    const middle = mul(add(inside[i], inside[i + 1]), HALF);
+    if (compare(f(middle), ZERO) > 0) {
+      if (equals(low, high)) low = inside[i];
+      high = inside[i + 1];
+    }
+  }
+  const root2 = exactSqrt(rational(2));
+  const [kk, mm] = [toNumber(k), toNumber(m)];
+  const region = conicRegion(
+    f,
+    (value) => (kk * (mm - value)) ** 2 - value * value,
+    low,
+    high,
+    place,
+    root2,
+  );
+
+  if (isZero(m) && compare(k, ones) > 0) {
+    // Through the tip of a cone flatter than the plane: two lines of its side
+    // and the base, a triangle.
+    const tip = place(0, 0);
+    const base = region.base!;
+    const slant = mulExact(
+      exactRational(floor.n < 0n ? mul(floor, rational(-1)) : floor),
+      exactSqrt(add(mul(k, k), ones)),
+    );
+    const area = mulExact(
+      base.length,
+      region.height.length,
+      exactRational(HALF),
+    );
+    return {
+      shape: "isoscelesTriangle",
+      outline: [base.from, base.to, tip],
+      edges: [
+        base,
+        { from: base.to, to: tip, length: slant },
+        { from: tip, to: base.from, length: slant },
+      ],
+      lines: [
+        {
+          id: "height",
+          symbol: "h",
+          from: tip,
+          to: place(toNumber(floor), 0),
+          length: region.height.length,
+          always: false,
+        },
+      ],
+      symbols: { b: "e0" },
+      area: {
+        formula: "A = bh / 2",
+        substitution: `A = ${factor(formatExact(base.length))} × ${factor(formatExact(region.height.length))} / 2`,
+        exact: area,
+        approximate: evalExact(area),
+      },
+      centre: place((2 * toNumber(floor)) / 3, 0),
+    };
+  }
+
+  if (compare(k, ones) < 0) {
+    const ends = [
+      div(mul(k, m), add(k, ones)),
+      div(mul(k, m), minus(k, ones)),
+    ].sort(compare);
+    if (compare(ends[0], floor) >= 0) {
+      // The whole ellipse, clear of the base.
+      const middle = mul(add(ends[0], ends[1]), HALF);
+      const long = mulExact(
+        exactRational(mul(minus(ends[1], ends[0]), HALF)),
+        root2,
+      );
+      const short = exactSqrt(f(middle));
+      const centre = place(toNumber(middle), 0);
+      const area = mulExact(long, short, exactPi(rational(1)));
+      return {
+        shape: "ellipse",
+        outline: region.outline,
+        edges: [],
+        lines: [
+          {
+            id: "minor",
+            symbol: "a",
+            from: centre,
+            to: place(toNumber(middle), evalExact(short)),
+            length: short,
+            always: true,
+          },
+          {
+            id: "major",
+            symbol: "b",
+            from: centre,
+            to: place(toNumber(ends[1]), 0),
+            length: long,
+            always: true,
+          },
+        ],
+        symbols: {},
+        area: {
+          formula: "A = πab",
+          substitution: `A = π × ${factor(formatExact(short))} × ${factor(formatExact(long))}`,
+          exact: area,
+          approximate: evalExact(area),
+        },
+        centre,
+      };
+    }
+    return {
+      shape: "partOfEllipse",
+      outline: region.outline,
+      edges: region.base ? [region.base] : [],
+      lines: [{ id: "height", symbol: "h", ...region.height, always: true }],
+      symbols: {},
+      area: {
+        formula: null,
+        substitution: null,
+        exact: null,
+        approximate: region.approximate,
+      },
+      centre: place((toNumber(low) + toNumber(high)) / 2, 0),
+    };
+  }
+
+  if (equals(k, ones)) {
+    // Archimedes: a parabola region is two thirds of the rectangle around it.
+    const base = region.base!;
+    const area = mulExact(
+      base.length,
+      region.height.length,
+      exactRational(rational(2, 3)),
+    );
+    return {
+      shape: "parabolaRegion",
+      outline: region.outline,
+      edges: [base],
+      lines: [{ id: "height", symbol: "h", ...region.height, always: true }],
+      symbols: { w: "e0" },
+      area: {
+        formula: "A = 2wh / 3",
+        substitution: `A = 2 × ${factor(formatExact(base.length))} × ${factor(formatExact(region.height.length))} / 3`,
+        exact: area,
+        approximate: evalExact(area),
+      },
+      centre: place((toNumber(low) + toNumber(high)) / 2, 0),
+    };
+  }
+  return hyperbolaOf(region);
+}
+
+function hyperbolaOf(region: ReturnType<typeof conicRegion>): RoundGeometry {
+  return {
+    shape: "hyperbolaRegion",
+    outline: region.outline,
+    edges: region.base ? [region.base] : [],
+    lines: [{ id: "height", symbol: "h", ...region.height, always: true }],
+    symbols: {},
+    area: {
+      formula: null,
+      substitution: null,
+      exact: null,
+      approximate: region.approximate,
+    },
+    centre: times(plus(region.height.from, region.height.to), 0.5),
   };
 }

@@ -176,23 +176,28 @@ Built as a single prerendered SvelteKit page.
 - `src/lib/domain/` holds the pure model: exact rational/radical/π arithmetic
   (`rational.ts`, `exact.ts`), the seven picker solids and their surface decomposition
   (`solids.ts`), 3D meshes and measurable edges (`geometry3d.ts`), net layouts
-  (`nets.ts`), unit-cube layout and fill steps (`unitCubes.ts`), input
+  (`nets.ts`), unit-cube layout and fill steps (`unitCubes.ts`), cross
+  sections (`crossSections.ts`: exact plane cuts of the polyhedra, and
+  analytic ones of the cylinder, cone and sphere), input
   validation (`validation.ts`), and unit labels
   (`format.ts`). None of it imports Svelte, and it is covered by
   `src/lib/domain/*.test.ts`.
 - `src/lib/state/lab.svelte.ts` keeps geometry, input drafts, and presentation
   state separate, as described in [domain-model.md](domain-model.md). What is
-  being measured is a hovered or pinned _target_: one surface, or one length
-  that every edge carrying it responds to.
-- `src/lib/components/` renders the solid, its unit cubes (`CubeView.svelte`)
-  and the net as accessible SVG. The
+  being measured is a hovered or pinned _target_: one surface, one length
+  that every edge carrying it responds to, or one side of the cross section
+  (or the whole of it), on both of the slice view's drawings at once.
+- `src/lib/components/` renders the solid, its unit cubes (`CubeView.svelte`),
+  the net, and in the slice view the see-through solid beside the face-on
+  cross section (`CrossSectionView.svelte`, with `SliceControls.svelte`) as
+  accessible SVG. The
   shape fills the screen; four small panels float over it — the solid picker
   top left, the view, unit, and floating-window controls top right, the
   dimensions bottom left, and the two totals bottom right. `ShapeLab.svelte`
   mounts the same stateful experience in the page or in a Document
   Picture-in-Picture window.
-- `tests/shape-lab.spec.ts` covers the browser behaviour listed in the domain
-  model's verification section.
+- `tests/geometric-solids.spec.ts` covers the browser behaviour listed in the
+  domain model's verification section.
 
 Run it with the workspace allocator, never a bare `bun run dev`:
 

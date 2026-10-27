@@ -1,6 +1,6 @@
 # Geometric Solids — domain model
 
-Status: proposed model based on confirmed discovery choices. No application implementation yet.
+Status: implemented, including the cubes and slice views; see [requirements.md](requirements.md#current-implementation-state).
 
 See [requirements.md](requirements.md) for the product decisions and proposed defaults.
 
@@ -34,7 +34,8 @@ See [requirements.md](requirements.md) for the product decisions and proposed de
 - **Slice:** A cut through a solid by a cutting plane, chosen by its slice direction and slice position. _Avoid:_
   layer, which is a one-cube-high slab in the cubes view.
 - **Slice direction:** Horizontal (parallel to the bottom face), vertical (perpendicular to it, in one of two
-  headings) or diagonal (at 45° to it, leaning toward the front, back, left or right).
+  headings) or diagonal (at 45° to it, rising toward the front, back, left or right). The four diagonals are quarter
+  turns of one another, so a round solid gives the same cross section on each at the same position.
 - **Slice position:** How far the cutting plane has moved along its one axis: height above the bottom face, distance
   in from the side, or, for a diagonal, how far it has slid from where it first touches the solid.
 - **Cross section:** The flat region where the cutting plane meets the solid. It is not a surface of the solid and adds
@@ -112,7 +113,7 @@ area.
 | Right-triangular prism | Rectangle of a(1 − y/b) by p at height y | Across the length: the right triangle a, b, c. Along it: a rectangle | Leaning across the length: rectangle. Leaning along it: trapezoid, or triangle once it reaches the top edge |
 | Square pyramid | Square of side b(1 − y/h) at height y | Isosceles triangle through the tip; trapezoid off it | Trapezoid |
 | Cylinder | Circle of radius r | Rectangle of width 2√(r² − d²) and height h, d from the axis | Ellipse with axes 2r and 2√2·r while it misses both disks; part of an ellipse once it cuts one |
-| Cone | Circle of radius r(1 − y/h) | Isosceles triangle through the tip; hyperbola region off it | Ellipse when h > r, or part of an ellipse once it cuts the base disk; parabola region when h = r; hyperbola region when h < r |
+| Cone | Circle of radius r(1 − y/h) | Isosceles triangle through the tip; hyperbola region off it | Ellipse when h > r, or part of an ellipse once it cuts the base disk; parabola region when h = r; hyperbola region when h < r, and an isosceles triangle where that plane passes through the tip |
 | Sphere | Circle of radius √(r² − d²), d from the centre | — | — |
 
 So with these slice directions every polygonal cross section is a rectangle, square, triangle or trapezoid; no slice
