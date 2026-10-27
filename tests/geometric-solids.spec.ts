@@ -404,6 +404,142 @@ function agreeWithin(a: number[], b: number[], slack: number) {
   a.forEach((value, index) => expect(value).toBeCloseTo(b[index], slack));
 }
 
+/** The side lengths written around the face-on cross section, sorted. */
+async function sectionSides(page: Page): Promise<string[]> {
+  const sides = await page.getByTestId("section-side").allInnerTexts();
+  return sides.map((side) => side.trim()).sort();
+}
+
+test("slices a solid and draws the cross section face-on", async ({ page }) => {
+  const before = await totals(page);
+  await page.getByTestId("view-slice").click();
+
+  await expect(page.getByTestId("solid-view")).toBeVisible();
+  await expect(page.getByTestId("section-view")).toBeVisible();
+  await expect(page.getByTestId("cutting-plane")).toBeAttached();
+  await expect(page.getByTestId("section-on-solid")).toBeAttached();
+
+  // Half way up a 3 × 4 × 5 prism: a rectangle the size of its bottom face.
+  await expect(page.getByTestId("input-slice-position")).toHaveValue("2.5");
+  await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
+  expect(await sectionSides(page)).toEqual(["3", "3", "4", "4"]);
+  await expect(page.getByTestId("section-area")).toContainText("12");
+
+  // Slicing never changes the solid.
+  expect(await totals(page)).toEqual(before);
+
+  // A slice holds still to be talked about.
+  await expect(page.getByTestId("toggle-spin")).toBeDisabled();
+
+  // Moving the plane by slider, by typing or by a nudge keeps it a rectangle.
+  await page.getByTestId("range-slice-position").fill("4");
+  await expect(page.getByTestId("input-slice-position")).toHaveValue("4");
+  await page.getByTestId("input-slice-position").fill("0.5");
+  await page.getByTestId("increase-slice-position").click();
+  await expect(page.getByTestId("input-slice-position")).toHaveValue("0.6");
+  await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
+  expect(await totals(page)).toEqual(before);
+});
+
+test("keeps the slice inside the solid", async ({ page }) => {
+  await page.getByTestId("view-slice").click();
+
+  // On the bottom face or the top, the plane only touches the solid.
+  for (const outside of ["0", "5", "7"]) {
+    await page.getByTestId("input-slice-position").fill(outside);
+    await expect(page.getByTestId("error-slice-position")).toContainText(
+      "inside the solid",
+    );
+    await expect(page.getByTestId("section-area")).toContainText("12");
+  }
+  await page.getByTestId("input-slice-position").fill("4.9");
+  await expect(page.getByTestId("error-slice-position")).toHaveCount(0);
+
+  // A smaller solid pulls the plane back inside it.
+  await page.getByTestId("shape-cube").click();
+  await expect(page.getByTestId("input-slice-position")).toHaveValue("1.9");
+  await expect(page.getByTestId("section-name")).toHaveText("Square");
+  await expect(page.getByTestId("section-area")).toContainText("4");
+  await page.getByTestId("input-s").fill("1");
+  await expect(page.getByTestId("input-slice-position")).toHaveValue("0.9");
+});
+
+test("offers no slice of the logo, and says why", async ({ page }) => {
+  await page.getByTestId("view-slice").click();
+  await page.getByTestId("brand-toggle").click();
+  await expect(page.getByTestId("view-slice")).toBeDisabled();
+  await expect(page.getByTestId("view-solid")).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(page.getByTestId("section-view")).toHaveCount(0);
+  await expect(page.getByTestId("no-slice-reason")).toContainText(
+    "teacher.dev key",
+  );
+});
+
+test("hides the cross section's name and area with the answers", async ({
+  page,
+}) => {
+  await page.getByTestId("view-slice").click();
+  await page.getByTestId("toggle-answers").click();
+
+  await expect(page.getByTestId("section-name-hidden")).toBeVisible();
+  await expect(page.getByTestId("section-area-hidden")).toBeVisible();
+  // The side lengths are what the class works the area out from.
+  expect(await sectionSides(page)).toEqual(["3", "3", "4", "4"]);
+
+  const view = page.getByTestId("section-view");
+  await expect(view).not.toHaveAttribute("aria-label", /Rectangle/);
+  await expect(page.getByTestId("section-card")).not.toContainText("Rectangle");
+  await expect(page.getByTestId("section-card")).not.toContainText("12");
+
+  // The choice holds across solids.
+  await page.getByTestId("shape-cube").click();
+  await expect(page.getByTestId("section-card")).not.toContainText("Square");
+  await page.getByTestId("toggle-answers").click();
+  await expect(page.getByTestId("section-name")).toHaveText("Square");
+});
+
+test("keeps the slice and the cross section in view on a narrow screen", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(page.locator("[data-ready=true]")).toBeAttached();
+  await page.getByTestId("view-slice").click();
+
+  await expect(page.getByTestId("section-name")).toBeInViewport();
+  await expect(page.getByTestId("input-slice-position")).toBeVisible();
+  const overflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test("floats the slice over other tabs and brings it back", async ({
+  page,
+  context,
+}) => {
+  await page.getByTestId("view-slice").click();
+  await page.getByTestId("input-slice-position").fill("1.5");
+
+  const floatingPagePromise = context.waitForEvent("page");
+  await page.getByTestId("toggle-float").click();
+  const floatingPage = await floatingPagePromise;
+  await expect(floatingPage.getByTestId("section-view")).toBeVisible();
+  await expect(floatingPage.getByTestId("input-slice-position")).toHaveValue(
+    "1.5",
+  );
+  await floatingPage.getByTestId("input-slice-position").fill("3");
+
+  await floatingPage.close();
+  await expect(page.getByTestId("section-view")).toBeVisible();
+  await expect(page.getByTestId("input-slice-position")).toHaveValue("3");
+});
+
 test("folds the solid out into its net and back, from the pose it was left in", async ({
   page,
 }) => {

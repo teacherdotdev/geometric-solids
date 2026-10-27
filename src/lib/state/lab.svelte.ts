@@ -5,11 +5,22 @@
  * input drafts and from presentation state. Rotating, highlighting, relabelling
  * units or hiding answers can never change a calculated quantity.
  */
+import {
+  type CrossSection,
+  type SliceDirection,
+  type SliceHeading,
+  SLICE_HEADINGS,
+  clampToSpan,
+  cutSolid,
+  insideSpan,
+  middleOfSpan,
+  sliceSpan,
+} from "$lib/domain/crossSections";
 import { type Exact, exactRational } from "$lib/domain/exact";
 import { type UnitKey } from "$lib/domain/format";
 import { buildEdges, buildMesh } from "$lib/domain/geometry3d";
 import { buildNet } from "$lib/domain/nets";
-import { fromTenths } from "$lib/domain/rational";
+import { fromTenths, mul, rational, toNumber } from "$lib/domain/rational";
 import {
   SOLIDS,
   buildSolid,
@@ -26,7 +37,12 @@ import {
   toCubeEdge,
   type CubeRun,
 } from "$lib/domain/unitCubes";
-import { dimensionToDraft, parseDimension } from "$lib/domain/validation";
+import {
+  RANGE_MESSAGE,
+  SLICE_OUTSIDE_MESSAGE,
+  dimensionToDraft,
+  parseDimension,
+} from "$lib/domain/validation";
 import { surfaceHue } from "$lib/ui/colors";
 
 export type { ViewMode };
@@ -101,6 +117,16 @@ export class LabState {
   fill = $state(0);
   /** Which way the cubes are moving on their own, or null while they wait. */
   cubeRun = $state<CubeRun | null>(null);
+  sliceDirection = $state<SliceDirection>("horizontal");
+  sliceHeading = $state<SliceHeading>("level");
+  /**
+   * Where the cutting plane is, in the solid's units along its one axis, on a
+   * tenth. Null until the slice view is first opened, and for a solid too thin
+   * to hold any tenth strictly inside it.
+   */
+  slicePosition = $state<number | null>(null);
+  sliceDraft = $state("");
+  sliceError = $state<string | null>(null);
 
   definition = $derived(SOLIDS[this.kind]);
   dimensions = $derived(this.dimensionsByKind[this.kind]);
@@ -110,6 +136,27 @@ export class LabState {
   /** The solid in unit cubes, or null for one that cubes cannot fill. */
   cubes = $derived(cubeBox(this.kind, this.dimensionsByKind[this.kind]));
   cubeTotal = $derived(this.cubes ? cubeCount(this.cubes) : 0);
+  /** How far the cutting plane can move: positions strictly between 0 and this. */
+  sliceSpan = $derived(
+    sliceSpan(this.kind, this.dimensionsByKind[this.kind], this.sliceHeading),
+  );
+  /**
+   * The cross section on screen, or null for a solid that cannot be sliced. A
+   * solid too thin to hold a tenth strictly inside it is cut through its middle.
+   */
+  section = $derived.by<CrossSection | null>(() => {
+    const span = this.sliceSpan;
+    if (!span) return null;
+    const wanted =
+      this.slicePosition === null ? null : fromTenths(this.slicePosition);
+    const position =
+      wanted && insideSpan(wanted, span) ? wanted : mul(span, rational(1n, 2n));
+    return cutSolid(this.kind, this.dimensions, {
+      direction: this.sliceDirection,
+      heading: this.sliceHeading,
+      position,
+    });
+  });
   /** Measurement lines follow the view, so a radius is never hidden behind the solid. */
   edges = $derived(
     buildEdges(
@@ -182,15 +229,18 @@ export class LabState {
     this.resetView();
     if (!offersView(kind, this.view)) this.view = "solid";
     if (this.view === "cubes") this.enterCubes();
+    this.fitSlice();
   }
 
   setView(view: ViewMode) {
     if (!offersView(this.kind, view) || view === this.view) return;
     const leaving = this.view;
     this.view = view;
-    // A net is flat; spinning it would be meaningless.
-    if (view === "net") this.autoRotate = false;
+    // A net is flat; spinning it would be meaningless. A slice holds still so
+    // the cut can be talked about.
+    if (view === "net" || view === "slice") this.autoRotate = false;
     if (view === "cubes") this.enterCubes();
+    if (view === "slice") this.fitSlice();
     // An entry the cube view refused may be fine for the others, but it was
     // never applied: show what the shape actually is rather than apply it now.
     if (leaving === "cubes") {
@@ -240,6 +290,79 @@ export class LabState {
     // A full solid stays full and an empty one empty; a part-filled one keeps
     // its count, which flows into the new rows. Cubes the solid gains lie flat.
     this.fill = wasFull ? this.cubeTotal : Math.min(this.fill, this.cubeTotal);
+    this.fitSlice();
+  }
+
+  /**
+   * Keep the cutting plane where it is, unless the solid no longer reaches
+   * there: then pull it back to the nearest tenth inside. The first time, put
+   * it half way through.
+   */
+  private fitSlice() {
+    const span = this.sliceSpan;
+    if (!span) return;
+    this.slicePosition =
+      this.slicePosition === null
+        ? middleOfSpan(span)
+        : clampToSpan(this.slicePosition, span);
+    this.sliceDraft =
+      this.slicePosition === null
+        ? String(toNumber(span) / 2)
+        : dimensionToDraft(this.slicePosition);
+    this.sliceError = null;
+  }
+
+  /** Apply a typed or dragged slice position, if it is inside the solid. */
+  setSliceDraft(raw: string) {
+    this.sliceDraft = raw;
+    const span = this.sliceSpan;
+    if (!span) return;
+    const parsed = parseDimension(raw);
+    // A number past either end is outside the solid, whatever the dimension
+    // inputs would make of it.
+    if (!parsed.ok) {
+      this.sliceError =
+        parsed.message === RANGE_MESSAGE && /^\d*\.?\d+$/.test(raw.trim())
+          ? SLICE_OUTSIDE_MESSAGE
+          : parsed.message;
+      return;
+    }
+    if (!insideSpan(fromTenths(parsed.value), span)) {
+      this.sliceError = SLICE_OUTSIDE_MESSAGE;
+      return;
+    }
+    this.sliceError = null;
+    this.slicePosition = parsed.value;
+  }
+
+  /** Step the slice position by whole increments, stopping inside the solid. */
+  nudgeSlice(delta: number) {
+    const span = this.sliceSpan;
+    if (!span || this.slicePosition === null) return;
+    const next = clampToSpan(
+      Math.round((this.slicePosition + delta) * 10) / 10,
+      span,
+    );
+    if (next === null) return;
+    this.slicePosition = next;
+    this.sliceDraft = dimensionToDraft(next);
+    this.sliceError = null;
+  }
+
+  /** Choose a slice direction, facing the first of its headings. */
+  setSliceDirection(direction: SliceDirection) {
+    if (direction === this.sliceDirection) return;
+    this.sliceDirection = direction;
+    this.sliceHeading = SLICE_HEADINGS[direction][0];
+    this.fitSlice();
+  }
+
+  /** Turn the slice a quarter turn to its direction's next heading. */
+  turnSlice() {
+    const headings = SLICE_HEADINGS[this.sliceDirection];
+    const index = headings.indexOf(this.sliceHeading);
+    this.sliceHeading = headings[(index + 1) % headings.length];
+    this.fitSlice();
   }
 
   /** Step a dimension by whole increments, keeping it inside the valid range. */

@@ -5,6 +5,7 @@
  * Everything here is pure. Rendering, highlighting and answer visibility never
  * feed back into these numbers.
  */
+import { slicesSolid } from "./crossSections";
 import {
   type Exact,
   addExact,
@@ -805,6 +806,8 @@ export function offersView(kind: SolidKind, view: ViewMode): boolean {
       return SOLIDS[kind].hasCubes;
     case "net":
       return SOLIDS[kind].hasNet;
+    case "slice":
+      return slicesSolid(kind);
   }
 }
 

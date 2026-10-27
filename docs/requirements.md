@@ -112,7 +112,7 @@ perpendicular to it, or at a diagonal.
   The position is drawn on the solid as a measured line, and the 90° or 45° angle between the cutting plane and the bottom face is marked.
 - The slider stops just short of both ends, where the plane would only touch the solid at a point, an edge or a face, so there is always a real cross section. Changing direction, heading, solid or dimensions keeps the position, pulled back into range when it no longer fits. Slice opens on Horizontal at half height.
 - On the solid, the cutting plane is drawn see-through and the cross section is outlined where it meets the surface. The solid is not cut apart. Drag, keyboard rotation and reset work as in the Solid view and the plane turns with the solid; auto-rotation is turned off.
-- The stage splits: the solid and its plane on one side, the **cross-section drawing** on the other, stacked on a narrow screen and in the floating window. The drawing is the cross section seen face-on, on the same scale and unit grid as the net.
+- The stage splits: the solid and its plane on one side, the **cross-section drawing** on the other, always side by side. The panels run along the top and bottom edges, so the room they leave is a band across the middle; both halves are fitted into it, on a phone as in the floating window. The drawing is the cross section seen face-on, at the same scale as the solid beside it and on a unit grid.
 - The drawing always shows:
   - the cross section's most specific name: square rather than rectangle; equilateral, isosceles or right triangle where true, otherwise triangle; trapezoid; circle, ellipse, part of an ellipse, parabola region, hyperbola region. These slice directions never give a pentagon or hexagon;
   - a length on every straight side;

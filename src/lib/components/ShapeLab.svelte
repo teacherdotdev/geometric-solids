@@ -1,6 +1,7 @@
 <script lang="ts">
   import BrandChip from "$lib/components/BrandChip.svelte";
   import CubeControls from "$lib/components/CubeControls.svelte";
+  import CrossSectionView from "$lib/components/CrossSectionView.svelte";
   import CubeView from "$lib/components/CubeView.svelte";
   import FloatControl from "$lib/components/FloatControl.svelte";
   import FoldTransition from "$lib/components/FoldTransition.svelte";
@@ -10,6 +11,7 @@
   import NetView from "$lib/components/NetView.svelte";
   import RotationControls from "$lib/components/RotationControls.svelte";
   import ShapeBar from "$lib/components/ShapeBar.svelte";
+  import SliceControls from "$lib/components/SliceControls.svelte";
   import SolidView from "$lib/components/SolidView.svelte";
   import TotalsCard from "$lib/components/TotalsCard.svelte";
   import ViewToggle from "$lib/components/ViewToggle.svelte";
@@ -114,6 +116,13 @@
   );
   /** What the panels cost the drawing altogether, top and bottom. */
   const chrome = $derived(floating ? topHeight + bottomHeight : 0);
+  /**
+   * A slice shares the screen between two drawings, each half as wide, so on a
+   * narrow screen even the full page has to fit them between the panels rather
+   * than under them: it measures them the way the floating window does.
+   */
+  const sliceLift = $derived(Math.max(0, (bottomHeight - topHeight) / 2));
+  const sliceChrome = $derived(topHeight + bottomHeight);
 
   // The widths along the bottom edge, for deciding whether the view controls
   // can keep the row with the panels either side of them.
@@ -181,6 +190,34 @@
         {chrome}
         onGrid={(step) => (gridStep = step)}
       />
+    {:else if lab.view === "slice" && lab.section}
+      <!-- The solid with its cut on one side, the cut itself face-on on the
+           other. Always side by side: the panels run along the top and bottom
+           edges, so the room they leave is a band across the middle, and the
+           lower of two drawings stacked one above the other would sit under
+           the bottom row of panels. -->
+      <div class="flex h-full w-full">
+        <div class="relative min-h-0 min-w-0 flex-1">
+          <SolidView
+            {lab}
+            {reducedMotion}
+            {animationWindow}
+            compact={floating}
+            lift={sliceLift}
+            chrome={sliceChrome}
+            onGrid={(step) => (gridStep = step)}
+          />
+        </div>
+        <div class="relative min-h-0 min-w-0 flex-1">
+          <CrossSectionView
+            {lab}
+            section={lab.section}
+            compact={floating}
+            lift={sliceLift}
+            chrome={sliceChrome}
+          />
+        </div>
+      </div>
     {:else if lab.view === "cubes" && lab.cubes}
       <CubeView
         {lab}
@@ -308,6 +345,8 @@
       >
         {#if lab.view === "cubes"}
           <CubeControls {lab} {reducedMotion} />
+        {:else if lab.view === "slice" && lab.section}
+          <SliceControls {lab} compact={floating} />
         {/if}
         <RotationControls {lab} {reducedMotion} compact={floating} />
       </div>

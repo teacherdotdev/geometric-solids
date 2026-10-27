@@ -21,6 +21,8 @@
   const isNet = $derived(lab.view === "net");
   /** Every cube lying flat is read like a net, not spun. */
   const allFlat = $derived(lab.view === "cubes" && lab.fill === 0);
+  /** A slice holds still so the cut can be talked about; it still turns by hand. */
+  const isSlice = $derived(lab.view === "slice");
   const button =
     "grid h-8 w-8 cursor-pointer place-items-center rounded-lg text-sm text-ink-soft hover:bg-ink/5 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30";
 </script>
@@ -103,7 +105,7 @@
       : ''}"
     data-testid="toggle-spin"
     aria-pressed={lab.autoRotate}
-    disabled={isNet || allFlat || reducedMotion}
+    disabled={isNet || allFlat || isSlice || reducedMotion}
     aria-label={lab.autoRotate ? t("rotation.stop") : t("rotation.spin")}
     title={reducedMotion
       ? t("rotation.reduced")

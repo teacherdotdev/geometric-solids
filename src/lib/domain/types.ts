@@ -29,9 +29,14 @@ export const SOLID_ORDER: readonly SolidKind[] = [
 export const SOLID_KINDS: readonly SolidKind[] = [...SOLID_ORDER, "logoSlab"];
 
 /** The ways the lab can show a solid, in the order their tabs appear. */
-export type ViewMode = "solid" | "cubes" | "net";
+export type ViewMode = "solid" | "cubes" | "net" | "slice";
 
-export const VIEW_ORDER: readonly ViewMode[] = ["solid", "cubes", "net"];
+export const VIEW_ORDER: readonly ViewMode[] = [
+  "solid",
+  "cubes",
+  "net",
+  "slice",
+];
 
 /** Independent dimensions, keyed by their mathematical symbol. */
 export type Dimensions = Readonly<Record<string, number>>;

@@ -173,8 +173,19 @@
     compact ? unitLabels(lab.unit).areaShort : unitLabels(lab.unit).area,
   );
 
+  /**
+   * In the slice view the solid is drawn see-through, so the cross section can
+   * be seen inside it. Every solid here is convex, so the cross section always
+   * lies behind the faces turned toward the viewer and in front of the ones
+   * turned away: drawing the far faces, then the cross section, then the near
+   * faces faintly over it puts everything in the right order without sorting.
+   */
+  const section = $derived(lab.view === "slice" ? lab.section : null);
+
   interface DrawnFacet {
     surfaceId: string;
+    /** Turned away from the viewer: only drawn while the solid is see-through. */
+    far: boolean;
     points: string;
     fill: string;
     stroke: string;
@@ -191,8 +202,11 @@
       );
       const normal = normalOf(rotated);
       const length = Math.hypot(normal[0], normal[1], normal[2]);
-      // Back faces of a closed convex solid are never visible.
-      if (length === 0 || normal[2] / length <= 1e-6) continue;
+      if (length === 0) continue;
+      // Back faces of a closed convex solid are never visible, unless the
+      // solid is see-through.
+      const far = normal[2] / length <= 1e-6;
+      if (far && !section) continue;
 
       const unit: Vec3 = [
         normal[0] / length,
@@ -210,6 +224,7 @@
       const fill = facetFill(hue, diffuse, lab.definition.baseHue ?? null);
       drawn.push({
         surfaceId: facet.surfaceId,
+        far,
         points: projected
           .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`)
           .join(" "),
@@ -223,6 +238,46 @@
       });
     }
     return drawn.sort((a, b) => a.depth - b.depth);
+  });
+
+  const nearFacets = $derived(facets.filter((facet) => !facet.far));
+  const farFacets = $derived(facets.filter((facet) => facet.far));
+
+  function projectAll(points: readonly Vec3[]): string {
+    return points
+      .map((point) => {
+        const [x, y] = projectPoint(
+          rotatePoint(point, lab.yaw, lab.pitch),
+          scale,
+        );
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(" ");
+  }
+
+  /**
+   * The cutting plane and where it meets the solid, projected. The plane is
+   * drawn as a sheet a little wider than the solid, so it reads as a flat cut
+   * running right through it rather than as a face of its own.
+   */
+  const slicing = $derived.by(() => {
+    if (!section) return null;
+    const { origin, across, up } = section.plane;
+    const reachOut = lab.mesh.extent * 1.35;
+    const corner = (i: number, j: number): Vec3 => [
+      origin[0] + (across[0] * i + up[0] * j) * reachOut,
+      origin[1] + (across[1] * i + up[1] * j) * reachOut,
+      origin[2] + (across[2] * i + up[2] * j) * reachOut,
+    ];
+    return {
+      sheet: projectAll([
+        corner(-1, -1),
+        corner(1, -1),
+        corner(1, 1),
+        corner(-1, 1),
+      ]),
+      outline: projectAll(section.outline3d),
+    };
   });
 
   /**
@@ -307,6 +362,9 @@
       running.y += facet.center[1] * facet.area;
       running.area += facet.area;
     }
+    // A see-through solid is there to show the cut; its faces are not what is
+    // being measured.
+    if (section) return [];
     return lab.model.surfaces
       .filter((surface) => (totals[surface.id]?.area ?? 0) > 0)
       .map((surface) => {
@@ -609,27 +667,83 @@
          so it goes on top instead. -->
     {#if !floor.fromBelow}{@render ground()}{/if}
 
-    {#each facets as facet, index (index)}
+    {#if slicing}
+      <!-- The plane first: inside the solid the far faces and the cross
+           section cover it, and outside it shows as a faint sheet. -->
       <polygon
-        points={facet.points}
-        fill={facet.fill}
-        stroke={facet.stroke}
-        stroke-width={facet.stroke === "#0b1a22" &&
-        lab.isActive(surfaceTarget(facet.surfaceId))
-          ? 4
-          : 1.5}
-        stroke-linejoin="round"
-        data-target={surfaceTarget(facet.surfaceId)}
+        points={slicing.sheet}
+        fill="#f59e0b"
+        fill-opacity="0.12"
+        stroke="#b45309"
+        stroke-opacity="0.45"
+        stroke-width="1.5"
+        stroke-dasharray="6 5"
+        pointer-events="none"
+        data-testid="cutting-plane"
       />
-      {#if lab.isActive(surfaceTarget(facet.surfaceId))}
+      {#each farFacets as facet, index (index)}
         <polygon
           points={facet.points}
-          fill="url(#{HATCH_PATTERN_ID})"
-          stroke="none"
+          fill={facet.fill}
+          fill-opacity="0.55"
+          stroke={facet.stroke}
+          stroke-opacity="0.35"
+          stroke-width="1"
+          stroke-linejoin="round"
           pointer-events="none"
         />
-      {/if}
-    {/each}
+      {/each}
+      <polygon
+        points={slicing.outline}
+        fill="#f59e0b"
+        fill-opacity="0.85"
+        stroke="none"
+        pointer-events="none"
+        data-testid="section-on-solid"
+      />
+      {#each nearFacets as facet, index (index)}
+        <polygon
+          points={facet.points}
+          fill={facet.fill}
+          fill-opacity="0.35"
+          stroke={facet.stroke}
+          stroke-opacity={facet.stroke === "#0b1a22" ? 0.8 : 0}
+          stroke-width="1.5"
+          stroke-linejoin="round"
+          pointer-events="none"
+        />
+      {/each}
+      <polygon
+        points={slicing.outline}
+        fill="none"
+        stroke="#b45309"
+        stroke-width="3"
+        stroke-linejoin="round"
+        pointer-events="none"
+      />
+    {:else}
+      {#each facets as facet, index (index)}
+        <polygon
+          points={facet.points}
+          fill={facet.fill}
+          stroke={facet.stroke}
+          stroke-width={facet.stroke === "#0b1a22" &&
+          lab.isActive(surfaceTarget(facet.surfaceId))
+            ? 4
+            : 1.5}
+          stroke-linejoin="round"
+          data-target={surfaceTarget(facet.surfaceId)}
+        />
+        {#if lab.isActive(surfaceTarget(facet.surfaceId))}
+          <polygon
+            points={facet.points}
+            fill="url(#{HATCH_PATTERN_ID})"
+            stroke="none"
+            pointer-events="none"
+          />
+        {/if}
+      {/each}
+    {/if}
 
     <!-- The mark itself, on the face it belongs to. Drawn after the facets, so
          it sits on the top face rather than under it. -->

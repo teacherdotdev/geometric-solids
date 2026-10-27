@@ -1,7 +1,11 @@
 import { browser } from "$app/environment";
 import type { UnitKey, UnitLabels } from "$lib/domain/format";
 import { CUBE_EDGE_MESSAGE } from "$lib/domain/unitCubes";
-import { RANGE_MESSAGE, STEP_MESSAGE } from "$lib/domain/validation";
+import {
+  RANGE_MESSAGE,
+  SLICE_OUTSIDE_MESSAGE,
+  STEP_MESSAGE,
+} from "$lib/domain/validation";
 
 export type LanguageCode = "en" | "es" | "fr";
 
@@ -36,6 +40,19 @@ const en = {
     "view.noNet.strong": "no flat net",
     "view.noNet.after":
       ": its surface cannot be flattened without stretching, which is why world maps distort countries.",
+    "view.slice": "Slice",
+    "view.noSlice":
+      "The teacher.dev key's cross sections have no names of their own, so it is not sliced.",
+    "slice.label": "Slice",
+    "slice.position.level": "Height above the bottom face",
+    "slice.position.frontToBack": "Distance in from the left side",
+    "slice.position.sideToSide": "Distance in from the back",
+    "slice.position.diagonal": "Distance slid from where it first touches",
+    "slice.drawing":
+      "The cross section, seen face-on: {name}, with sides {sides} {unit}.",
+    "slice.hiddenName": "shape hidden",
+    "slice.side": "Side, {value} {unit}",
+    "slice.area": "Area of the cross section",
     "shape.label": "Solid",
     "measure.dimensions": "Dimensions, in {unit}",
     "measure.show": "{label}. {hint}. Show it on the shape.",
@@ -47,6 +64,7 @@ const en = {
     "validation.number": "Enter a number",
     "validation.range": "Enter a number from 0.1 to 100000",
     "validation.step": "Use steps of 0.1, for example 2.5",
+    "validation.slice": "Enter a position inside the solid",
     "validation.cubes": "Unit cubes need a whole number from 1 to 10",
     "totals.label": "Totals",
     "totals.hidden": "hidden",
@@ -204,6 +222,20 @@ const es = {
     "view.noNet.strong": "no tiene una red plana",
     "view.noNet.after":
       ": su superficie no se puede aplanar sin estirarla; por eso los mapas del mundo deforman los países.",
+    "view.slice": "Corte",
+    "view.noSlice":
+      "Las secciones de la tecla de teacher.dev no tienen nombre propio, así que no se corta.",
+    "slice.label": "Corte",
+    "slice.position.level": "Altura sobre la cara inferior",
+    "slice.position.frontToBack": "Distancia desde el lado izquierdo",
+    "slice.position.sideToSide": "Distancia desde atrás",
+    "slice.position.diagonal":
+      "Distancia recorrida desde donde toca por primera vez",
+    "slice.drawing":
+      "La sección transversal, vista de frente: {name}, con lados {sides} {unit}.",
+    "slice.hiddenName": "figura oculta",
+    "slice.side": "Lado, {value} {unit}",
+    "slice.area": "Área de la sección transversal",
     "shape.label": "Sólido",
     "measure.dimensions": "Dimensiones, en {unit}",
     "measure.show": "{label}. {hint}. Mostrar en la figura.",
@@ -215,6 +247,7 @@ const es = {
     "validation.number": "Introduce un número",
     "validation.range": "Introduce un número entre 0.1 y 100000",
     "validation.step": "Usa incrementos de 0.1; por ejemplo, 2.5",
+    "validation.slice": "Escribe una posición dentro del sólido",
     "validation.cubes":
       "Los cubos unitarios necesitan un número entero del 1 al 10",
     "totals.label": "Totales",
@@ -301,6 +334,19 @@ const es = {
     Cone: "Cono",
     Sphere: "Esfera",
     "teacher.dev key": "tecla de teacher.dev",
+    Square: "Cuadrado",
+    Rectangle: "Rectángulo",
+    Rhombus: "Rombo",
+    Parallelogram: "Paralelogramo",
+    Trapezoid: "Trapecio",
+    Quadrilateral: "Cuadrilátero",
+    "Equilateral triangle": "Triángulo equilátero",
+    "Right isosceles triangle": "Triángulo rectángulo isósceles",
+    "Isosceles triangle": "Triángulo isósceles",
+    "Right triangle": "Triángulo rectángulo",
+    Triangle: "Triángulo",
+    Pentagon: "Pentágono",
+    Hexagon: "Hexágono",
     "Top face": "Cara superior",
     "Bottom face": "Cara inferior",
     "Front face": "Cara frontal",
@@ -449,6 +495,19 @@ const fr = {
     "view.noNet.strong": "n’a pas de patron plan",
     "view.noNet.after":
       " : sa surface ne peut pas être aplatie sans être étirée, ce qui explique pourquoi les cartes du monde déforment les pays.",
+    "view.slice": "Coupe",
+    "view.noSlice":
+      "Les sections de la touche teacher.dev n’ont pas de nom propre, elle n’est donc pas coupée.",
+    "slice.label": "Coupe",
+    "slice.position.level": "Hauteur au-dessus de la face du bas",
+    "slice.position.frontToBack": "Distance depuis le côté gauche",
+    "slice.position.sideToSide": "Distance depuis l’arrière",
+    "slice.position.diagonal": "Distance parcourue depuis le premier contact",
+    "slice.drawing":
+      "La section, vue de face : {name}, de côtés {sides} {unit}.",
+    "slice.hiddenName": "figure masquée",
+    "slice.side": "Côté, {value} {unit}",
+    "slice.area": "Aire de la section",
     "shape.label": "Solide",
     "measure.dimensions": "Dimensions, en {unit}",
     "measure.show": "{label}. {hint}. Afficher sur la figure.",
@@ -460,6 +519,7 @@ const fr = {
     "validation.number": "Saisissez un nombre",
     "validation.range": "Saisissez un nombre compris entre 0.1 et 100000",
     "validation.step": "Utilisez des pas de 0.1, par exemple 2.5",
+    "validation.slice": "Saisissez une position à l’intérieur du solide",
     "validation.cubes": "Les cubes unités demandent un nombre entier de 1 à 10",
     "totals.label": "Totaux",
     "totals.hidden": "masqué",
@@ -546,6 +606,19 @@ const fr = {
     Cone: "Cône",
     Sphere: "Sphère",
     "teacher.dev key": "touche teacher.dev",
+    Square: "Carré",
+    Rectangle: "Rectangle",
+    Rhombus: "Losange",
+    Parallelogram: "Parallélogramme",
+    Trapezoid: "Trapèze",
+    Quadrilateral: "Quadrilatère",
+    "Equilateral triangle": "Triangle équilatéral",
+    "Right isosceles triangle": "Triangle rectangle isocèle",
+    "Isosceles triangle": "Triangle isocèle",
+    "Right triangle": "Triangle rectangle",
+    Triangle: "Triangle",
+    Pentagon: "Pentagone",
+    Hexagon: "Hexagone",
     "Top face": "Face supérieure",
     "Bottom face": "Face inférieure",
     "Front face": "Face avant",
@@ -733,6 +806,7 @@ export function validationMessage(message: string): string {
   if (message === RANGE_MESSAGE) return t("validation.range");
   if (message === STEP_MESSAGE) return t("validation.step");
   if (message === CUBE_EDGE_MESSAGE) return t("validation.cubes");
+  if (message === SLICE_OUTSIDE_MESSAGE) return t("validation.slice");
   if (message === "Enter a number") return t("validation.number");
   return message;
 }

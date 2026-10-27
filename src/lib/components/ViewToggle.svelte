@@ -9,10 +9,10 @@
     onViewChange = (view) => lab.setView(view),
   }: { lab: LabState; onViewChange?: (view: ViewMode) => void } = $props();
 
-  // Three tabs only just clear the shape picker on a phone, so they close up
-  // there.
+  // Four tabs only clear the shape picker on a phone once they close up:
+  // tighter padding, letters set closer and a point smaller.
   const tab =
-    "cursor-pointer rounded-lg px-2.5 py-1 max-sm:px-1.5 text-xs font-bold tracking-wide uppercase transition disabled:cursor-not-allowed disabled:opacity-40";
+    "cursor-pointer rounded-lg px-2.5 py-1 max-sm:px-1 text-xs max-sm:text-[11px] font-bold tracking-wide max-sm:tracking-normal uppercase transition disabled:cursor-not-allowed disabled:opacity-40";
   const reason =
     "absolute top-full right-0 z-30 mt-2 w-60 rounded-lg border border-rule/70 bg-panel/95 px-3 py-1.5 text-center text-xs font-normal normal-case shadow-lg shadow-ink/10 backdrop-blur-md";
 
@@ -25,6 +25,7 @@
     solid: () => t("view.solid"),
     cubes: () => t("view.cubes"),
     net: () => t("view.net"),
+    slice: () => t("view.slice"),
   };
 
   /**
@@ -34,6 +35,7 @@
   const reasons: Partial<Record<ViewMode, Snippet>> = {
     cubes: noCubes,
     net: noNet,
+    slice: noSlice,
   };
 
   /** Which greyed-out tab the pointer is on, which is where its excuse lives. */
@@ -42,6 +44,10 @@
 
 {#snippet noCubes()}
   {t("view.noCubes")}
+{/snippet}
+
+{#snippet noSlice()}
+  {t("view.noSlice")}
 {/snippet}
 
 {#snippet noNet()}
