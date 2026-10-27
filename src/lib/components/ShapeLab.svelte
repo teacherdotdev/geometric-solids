@@ -265,31 +265,39 @@
   </div>
 
   <!-- Top right: which view, what the numbers are called, and whether the lab
-       floats over other tabs. The row wraps in a small floating window. -->
+       floats over other tabs. The row wraps in a small floating window. In the
+       cubes view the player for the cubes hangs under it. -->
   <div
-    class="pointer-events-none absolute top-2 right-2 z-20 flex flex-wrap justify-end gap-1.5 sm:max-w-none {floating
-      ? 'max-w-[min(22rem,62vw)]'
-      : 'max-w-[14rem]'}"
+    class="pointer-events-none absolute top-2 right-2 z-20 flex flex-col items-end gap-1.5"
     use:measureBox={(_width, height) => (topHeight = height)}
   >
-    {#if onFloat}
-      <FloatControl supported={floatSupported} onToggle={onFloat} />
-    {/if}
-    <ViewToggle {lab} onViewChange={changeView} />
-    <label class="sr-only" for="unit-select">{t("lab.units")}</label>
-    <select
-      id="unit-select"
-      data-testid="unit-select"
-      class="pointer-events-auto cursor-pointer rounded-xl border border-rule/70 bg-panel/85 px-2 py-1 text-xs font-bold shadow-lg shadow-ink/10 backdrop-blur-md"
-      value={lab.unit}
-      onchange={(event) => (lab.unit = event.currentTarget.value as UnitKey)}
+    <div
+      class="flex flex-wrap justify-end gap-1.5 sm:max-w-none {floating
+        ? 'max-w-[min(22rem,62vw)]'
+        : 'max-w-[14rem]'}"
     >
-      {#each UNIT_ORDER as key (key)}
-        <option value={key}>{unitLabels(key).linear}</option>
-      {/each}
-    </select>
-    {#if !floating}
-      <LanguagePicker />
+      {#if onFloat}
+        <FloatControl supported={floatSupported} onToggle={onFloat} />
+      {/if}
+      <ViewToggle {lab} onViewChange={changeView} />
+      <label class="sr-only" for="unit-select">{t("lab.units")}</label>
+      <select
+        id="unit-select"
+        data-testid="unit-select"
+        class="pointer-events-auto cursor-pointer rounded-xl border border-rule/70 bg-panel/85 px-2 py-1 text-xs font-bold shadow-lg shadow-ink/10 backdrop-blur-md"
+        value={lab.unit}
+        onchange={(event) => (lab.unit = event.currentTarget.value as UnitKey)}
+      >
+        {#each UNIT_ORDER as key (key)}
+          <option value={key}>{unitLabels(key).linear}</option>
+        {/each}
+      </select>
+      {#if !floating}
+        <LanguagePicker />
+      {/if}
+    </div>
+    {#if lab.view === "cubes"}
+      <CubeControls {lab} />
     {/if}
   </div>
 
@@ -343,9 +351,7 @@
         class="flex flex-col items-center gap-1.5"
         use:measureBox={(width) => (middleWidth = width)}
       >
-        {#if lab.view === "cubes"}
-          <CubeControls {lab} {reducedMotion} />
-        {:else if lab.view === "slice" && lab.section}
+        {#if lab.view === "slice" && lab.section}
           <SliceControls {lab} compact={floating} />
         {/if}
         <RotationControls {lab} {reducedMotion} compact={floating} />

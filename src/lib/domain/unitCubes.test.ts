@@ -8,7 +8,6 @@ import {
   cubeCount,
   flatCentre,
   isCubeEdge,
-  playRate,
   sceneLength,
   stackedCentre,
   toCubeEdge,
@@ -104,25 +103,21 @@ describe("unit cubes", () => {
     );
   });
 
-  it("play at four a second, but never take much over twenty seconds", () => {
-    expect(playRate(60)).toBe(4);
-    expect(1000 / playRate(1000)).toBe(20);
+  it("advance one cube at a time either way", () => {
+    expect(advanceFill(0, PRISM, "stack")).toBe(1);
+    expect(advanceFill(10, PRISM, "stack", 3)).toBe(13);
+    expect(advanceFill(59, PRISM, "stack", 5)).toBe(60);
+    expect(advanceFill(60, PRISM, "flatten")).toBe(59);
+    expect(advanceFill(2, PRISM, "flatten", 5)).toBe(0);
   });
 
-  it("advance one cube at a time when playing", () => {
-    expect(advanceFill(0, PRISM, "play")).toBe(1);
-    expect(advanceFill(10, PRISM, "play", 3)).toBe(13);
-    expect(advanceFill(59, PRISM, "play", 5)).toBe(60);
-  });
-
-  it("advance by whole layers when stacking, flattening, or playing by layer", () => {
-    expect(advanceFill(0, PRISM, "stack")).toBe(12);
+  it("advance by whole layers either way when asked to", () => {
+    expect(advanceFill(0, PRISM, "stack", 1, true)).toBe(12);
     // A part-filled layer is finished first, not skipped.
-    expect(advanceFill(14, PRISM, "stack")).toBe(24);
-    expect(advanceFill(55, PRISM, "stack")).toBe(60);
-    expect(advanceFill(60, PRISM, "flatten")).toBe(48);
-    expect(advanceFill(14, PRISM, "flatten")).toBe(12);
-    expect(advanceFill(5, PRISM, "flatten", 3)).toBe(0);
-    expect(advanceFill(14, PRISM, "play", 1, true)).toBe(24);
+    expect(advanceFill(14, PRISM, "stack", 1, true)).toBe(24);
+    expect(advanceFill(55, PRISM, "stack", 1, true)).toBe(60);
+    expect(advanceFill(60, PRISM, "flatten", 1, true)).toBe(48);
+    expect(advanceFill(14, PRISM, "flatten", 1, true)).toBe(12);
+    expect(advanceFill(5, PRISM, "flatten", 3, true)).toBe(0);
   });
 });

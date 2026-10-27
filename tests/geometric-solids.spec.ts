@@ -278,36 +278,49 @@ test("moves cubes between the flat arrangement and the solid", async ({
   await page.getByTestId("view-cubes").click();
   const count = page.getByTestId("cubes-count");
   const cubes = page.getByTestId("cube-view");
+  const slider = page.getByTestId("cubes-slider");
 
-  await page.getByTestId("cubes-remove").click();
+  // The player sits in the top right, under the view tabs.
+  const viewport = page.viewportSize()!;
+  const controls = (await page.getByTestId("cube-controls").boundingBox())!;
+  const tabs = (await page.getByTestId("view-cubes").boundingBox())!;
+  expect(controls.y).toBeGreaterThan(tabs.y);
+  expect(controls.y).toBeLessThan(viewport.height / 2);
+  expect(controls.x + controls.width).toBeGreaterThan(viewport.width - 24);
+
+  // The slider reads left to right from all stacked to all flat, a cube a step.
+  await expect(page.getByTestId("cubes-play-stack")).toBeDisabled();
+  await expect(page.getByTestId("cubes-pause")).toBeDisabled();
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
   await expect(count).toHaveText("59 of 60 unit cubes stacked");
-  await page.getByTestId("cubes-add").click();
+  await page.keyboard.press("ArrowLeft");
   await expect(count).toHaveText("60 of 60 unit cubes stacked");
-  await expect(page.getByTestId("cubes-play")).toBeDisabled();
 
   // A full solid stays full as it grows.
   await page.getByTestId("input-l").fill("4");
   await expect(count).toHaveText("80 of 80 unit cubes stacked");
   await page.getByTestId("input-l").fill("3");
 
-  await page.getByTestId("cubes-flatten").click();
+  await slider.focus();
+  await page.keyboard.press("End");
   await expect(count).toHaveText("0 of 60 unit cubes stacked");
+  await expect(page.getByTestId("cubes-play-flatten")).toBeDisabled();
   // Every cube is still on screen, lying flat, and a flat strip is not spun.
   await expect(cubes).toHaveAttribute("data-cubes", "60");
   await expect(page.getByTestId("toggle-spin")).toBeDisabled();
-  await expect(page.getByTestId("flat-label-length")).toHaveText(
-    "h × l = 5 × 3 = 15 units",
-  );
+  // Only the solid's edges are labelled, not the flat arrangement's.
+  await expect(page.locator("[data-testid^=flat-label]")).toHaveCount(0);
 
-  // Play stacks them one at a time until paused.
-  await page.getByTestId("cubes-play").click();
-  await expect(page.getByTestId("cubes-play")).toHaveAttribute(
+  // Playing towards the solid stacks them one at a time until paused.
+  await page.getByTestId("cubes-play-stack").click();
+  await expect(page.getByTestId("cubes-play-stack")).toHaveAttribute(
     "aria-pressed",
     "true",
   );
   await expect(count).not.toHaveText("0 of 60 unit cubes stacked");
-  await page.getByTestId("cubes-play").click();
-  await expect(page.getByTestId("cubes-play")).toHaveAttribute(
+  await page.getByTestId("cubes-pause").click();
+  await expect(page.getByTestId("cubes-play-stack")).toHaveAttribute(
     "aria-pressed",
     "false",
   );
@@ -315,12 +328,22 @@ test("moves cubes between the flat arrangement and the solid", async ({
   await page.waitForTimeout(600);
   await expect(count).toHaveText(paused);
 
-  await page.getByTestId("cubes-stack").click();
+  // And the other way, back towards the flat arrangement.
+  await page.getByTestId("cubes-play-flatten").click();
+  await expect(page.getByTestId("cubes-play-flatten")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(count).toHaveText("0 of 60 unit cubes stacked");
+  await expect(page.getByTestId("cubes-pause")).toBeDisabled();
+
+  await slider.focus();
+  await page.keyboard.press("Home");
   await expect(count).toHaveText("60 of 60 unit cubes stacked");
   await expect(page.getByTestId("toggle-spin")).toBeEnabled();
 });
 
-test("stacks and flattens at once when motion is not wanted", async ({
+test("plays a layer at a time when motion is not wanted", async ({
   browser,
 }) => {
   const context = await browser.newContext({ reducedMotion: "reduce" });
@@ -329,36 +352,34 @@ test("stacks and flattens at once when motion is not wanted", async ({
   await expect(page.locator("[data-ready=true]")).toBeAttached();
 
   await page.getByTestId("view-cubes").click();
-  await page.getByTestId("cubes-flatten").click();
+  await page.getByTestId("cubes-play-flatten").click();
   await expect(page.getByTestId("cubes-count")).toHaveText(
-    "0 of 60 unit cubes stacked",
+    "48 of 60 unit cubes stacked",
   );
-  // Playing goes a whole layer at a time instead of a cube at a time.
-  await page.getByTestId("cubes-play").click();
+  await page.getByTestId("cubes-pause").click();
+  await page.getByTestId("cubes-play-stack").click();
   await expect(page.getByTestId("cubes-count")).toHaveText(
-    "12 of 60 unit cubes stacked",
+    "60 of 60 unit cubes stacked",
   );
   await context.close();
 });
 
-test("hides the cube count and the flat length with the answers", async ({
-  page,
-}) => {
+test("hides the cube count with the answers", async ({ page }) => {
   await page.getByTestId("view-cubes").click();
   await page.getByTestId("toggle-answers").click();
 
   await expect(page.getByTestId("cubes-count")).toHaveCount(0);
-  await expect(page.getByTestId("flat-label-length")).toHaveText(
-    "h × l = 5 × 3 units",
-  );
   const description = await page
     .getByTestId("cube-view")
     .getAttribute("aria-label");
   expect(description).not.toMatch(/60|15/);
+  // Nor does the slider: it runs over a share, and says only that.
+  const slider = page.getByTestId("cubes-slider");
+  await expect(slider).toHaveAttribute("aria-valuetext", "100% stacked");
+  await expect(slider).toHaveAttribute("max", "1");
 
   await page.getByTestId("toggle-answers").click();
   await expect(page.getByTestId("cubes-count")).toBeVisible();
-  await expect(page.getByTestId("flat-label-length")).toContainText("= 15");
 });
 
 /** Where an element sits on the page, which is comparable across the views. */

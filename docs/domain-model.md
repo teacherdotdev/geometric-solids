@@ -175,7 +175,7 @@ These do not alter the physical calculations. Switching shape clears incompatibl
 7. A cone sector's arc length equals its base circumference and its area equals the curved side's area.
 8. A rectangular prism's, cube's, or triangular prism's net preserves all surface dimensions and joining-edge lengths.
 9. Rotation, highlighting, unit-label changes, and view changes do not alter numeric geometry.
-10. Hidden final answers do not appear in rendered text, accessibility descriptions, tooltips, or net labels. Formula substitutions intentionally remain visible. In the cubes view this includes the cube count and the flat arrangement's evaluated length. In the slice view it includes the cross section's name and evaluated area; its side lengths stay visible.
+10. Hidden final answers do not appear in rendered text, accessibility descriptions, tooltips, or net labels. Formula substitutions intentionally remain visible. In the cubes view this includes the cube count. In the slice view it includes the cross section's name and evaluated area; its side lengths stay visible.
 11. The cubes view always shows exactly as many unit cubes as the volume, each either stacked or in the flat arrangement.
 12. Slicing never changes a solid's dimensions, surface area or volume.
 13. Every in-range slice position gives a cross section of positive, finite area; neither end of the range is offered.

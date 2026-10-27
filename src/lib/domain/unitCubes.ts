@@ -157,25 +157,21 @@ export function cubeCentreAt(
 }
 
 /**
- * The play button's pace, in cubes per second: about four, slow enough to
- * count aloud, but quicker for a big solid so that a full fill never takes much
- * more than twenty seconds.
+ * The play buttons' pace, in cubes per second, whatever the size of the solid:
+ * slow enough to count aloud.
  */
-export function playRate(count: number): number {
-  return Math.max(4, count / 20);
-}
+export const CUBES_PER_SECOND = 4;
 
 /**
- * Which way cubes are moving on their own, if they are. "play" stacks one cube
- * at a time; "stack" and "flatten" move a whole layer at a time.
+ * Which way cubes are moving on their own, if they are: into the solid, or out
+ * of it into the flat arrangement.
  */
-export type CubeRun = "play" | "stack" | "flatten";
+export type CubeRun = "stack" | "flatten";
 
 /**
- * The fill after `steps` steps of a run. Playing moves single cubes, unless
- * `byLayer` asks it to keep to whole layers as stacking and flattening do. A
- * step by layer finishes the layer under way first, so a part-filled layer is
- * completed or emptied rather than skipped.
+ * The fill after `steps` steps of a run: one cube a step, unless `byLayer` asks
+ * for whole layers. A step by layer finishes the layer under way first, so a
+ * part-filled layer is completed or emptied rather than skipped.
  */
 export function advanceFill(
   fill: number,
@@ -185,8 +181,7 @@ export function advanceFill(
   byLayer = false,
 ): number {
   const total = cubeCount(box);
-  const size = layerSize(box);
-  if (run === "play" && !byLayer) return Math.min(total, fill + steps);
+  const size = byLayer ? layerSize(box) : 1;
   if (run === "flatten") {
     const below = (Math.ceil(fill / size) - steps) * size;
     return Math.max(0, below);

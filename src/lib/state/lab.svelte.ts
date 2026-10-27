@@ -417,24 +417,16 @@ export class LabState {
     this.pinned = [];
   }
 
-  /** Move cubes by hand, one at a time. Stops anything already moving them. */
-  stepCubes(delta: number) {
+  /** Move cubes by hand to a given fill. Stops anything already moving them. */
+  placeCubes(fill: number) {
     this.cubeRun = null;
-    this.setFill(this.fill + delta);
+    this.setFill(fill);
   }
 
-  /**
-   * Set cubes moving on their own. With `instant`, a whole-layer run lands at
-   * once instead, for a viewer who has asked for reduced motion.
-   */
-  runCubes(run: CubeRun, instant = false) {
+  /** Set cubes moving on their own, towards the solid or the flat arrangement. */
+  runCubes(run: CubeRun) {
     const goal = run === "flatten" ? 0 : this.cubeTotal;
     if (this.fill === goal) return;
-    if (instant && run !== "play") {
-      this.cubeRun = null;
-      this.setFill(goal);
-      return;
-    }
     this.cubeRun = run;
   }
 

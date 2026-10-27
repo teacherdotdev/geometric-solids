@@ -14,8 +14,8 @@
   import {
     cubeCell,
     cubeCentreAt,
+    CUBES_PER_SECOND,
     flatStart,
-    playRate,
     sceneLength,
     solidStart,
     type CubeBox,
@@ -54,8 +54,6 @@
   const INK = "#0b1a22";
   /** Seconds one cube takes to travel between the flat arrangement and the solid. */
   const FLIGHT = 0.6;
-  /** Seconds for every layer to be stacked, or laid flat, in one go. */
-  const STACK_TIME = 1.5;
   /** Seconds between layers when playing with reduced motion, which jumps a layer at a time. */
   const LAYER_PAUSE = 0.7;
   /**
@@ -136,14 +134,8 @@
   $effect(() => {
     const fill = lab.fill;
     const run = lab.cubeRun;
-    const total = box.l * box.w * box.h;
     const byLayer = reducedMotion;
-    const interval =
-      run === "play"
-        ? byLayer
-          ? LAYER_PAUSE
-          : 1 / playRate(total)
-        : STACK_TIME / box.h;
+    const interval = byLayer ? LAYER_PAUSE : 1 / CUBES_PER_SECOND;
     const clock = animationWindow ?? window;
     let frame = 0;
     let previous = clock.performance.now();
@@ -408,21 +400,14 @@
   );
 
   /**
-   * The edges of the solid and of the flat arrangement, labelled. The solid's
-   * are on its outer end, away from the flat arrangement; the long edges are
-   * on whichever side is nearer the viewer. The flat arrangement's length is
-   * given as the layers that make it, h × l, and only worked out while the
-   * answers are showing: with its width it would give the volume away.
+   * The edges of the solid, labelled: on its outer end, away from the flat
+   * arrangement, with the long edges on whichever side is nearer the viewer.
    */
   const labels = $derived.by(() => {
     const x0 = solidStart(box);
     const bottom = -box.h / 2;
     const near = turn([0, 0, 1])[2] >= 0 ? box.w / 2 : -box.w / 2;
-    const fx0 = flatStart(box);
-    const fx1 = length / 2;
-    const long = box.h * box.l;
     const solidMiddle = screen([x0 + box.l / 2, 0, 0]);
-    const flatMiddle = screen([(fx0 + fx1) / 2, bottom + 0.5, 0]);
     const place = (point: Vec3, middle: [number, number]) => {
       const [x, y] = screen(point);
       // Off the edge, away from the middle of the shape it belongs to, so the
@@ -456,18 +441,6 @@
         id: "cube-label-h",
         text: `${keys.h} = ${box.h} ${linear}`,
         ...place([x0, 0, near], solidMiddle),
-      },
-      {
-        id: "flat-label-w",
-        text: `${keys.w} = ${box.w} ${linear}`,
-        ...place([fx1, bottom, 0], flatMiddle),
-      },
-      {
-        id: "flat-label-length",
-        text: `${keys.h} × ${keys.l} = ${box.h} × ${box.l}${
-          lab.answersVisible ? ` = ${long}` : ""
-        } ${linear}`,
-        ...place([(fx0 + fx1) / 2, bottom, near], flatMiddle),
       },
     ];
   });
