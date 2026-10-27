@@ -5,7 +5,11 @@
   import { approximateText, formatApproximate } from "$lib/domain/format";
   import { DIMENSION_MAX } from "$lib/domain/types";
   import { domainText, t, unitLabels } from "$lib/i18n/index.svelte";
-  import type { LabState } from "$lib/state/lab.svelte";
+  import {
+    sectionTarget,
+    type LabState,
+    type Target,
+  } from "$lib/state/lab.svelte";
   import { fitFraction, gridLayers, gridScale } from "$lib/ui/grid";
   import { measureBox } from "$lib/ui/measureBox";
   import { stageRise, stageRoom } from "$lib/ui/stage";
@@ -101,6 +105,17 @@
     ];
   });
 
+  /** Which side each symbol in the area formula names, the other way round. */
+  const symbolOf = $derived(
+    Object.fromEntries(
+      Object.entries(section.symbols).map(([symbol, id]) => [id, symbol]),
+    ) as Record<string, string>,
+  );
+
+  /** The whole cross section, as one thing to point at. */
+  const areaTarget = sectionTarget("area");
+  const areaActive = $derived(lab.isActive(areaTarget));
+
   /** One length per side, set just outside the side's middle. */
   const sides = $derived(
     section.edges.map((edge) => {
@@ -109,14 +124,50 @@
       const mid: Point2 = [(x1 + x2) / 2, (y1 + y2) / 2];
       const away = [mid[0] - centre[0], mid[1] - centre[1]];
       const distance = Math.hypot(away[0], away[1]) || 1;
+      const target = sectionTarget(edge.id);
       return {
         id: edge.id,
+        target,
+        active: lab.isActive(target),
+        pinned: lab.isPinned(target),
+        symbol: symbolOf[edge.id] ?? null,
         value: formatExact(edge.length),
+        approximate: evalExact(edge.length),
+        line: { x1, y1, x2, y2 },
         x: halfWidth + mid[0] + (away[0] / distance) * 22,
         y: centerY + mid[1] + (away[1] / distance) * 18,
       };
     }),
   );
+
+  /**
+   * The lengths an area formula needs that are not sides, such as a
+   * triangle's height. Only drawn while the working is shown.
+   */
+  const heights = $derived(
+    section.lines.map((line) => {
+      const [x1, y1] = place(line.from2d);
+      const [x2, y2] = place(line.to2d);
+      return {
+        ...line,
+        value: formatExact(line.length),
+        x1,
+        y1,
+        x2,
+        y2,
+        // The label sits beside the line's middle, off to the side.
+        x: halfWidth + (x1 + x2) / 2 + 10,
+        y: centerY + (y1 + y2) / 2,
+      };
+    }),
+  );
+
+  /** The section target under an event, read straight off the markup. */
+  function targetOf(event: Event): Target | null {
+    const element = event.target as Element | null;
+    return (element?.closest?.("[data-target]")?.getAttribute("data-target") ??
+      null) as Target | null;
+  }
 
   /** The card sits under the cross section, clear of its lowest side label. */
   const cardTop = $derived(
@@ -145,12 +196,23 @@
     measured = true;
   }}
 >
+  <!-- Pointing at a side or at the cross section measures it, exactly as
+       pointing at an edge or a face of the solid does. The same measurements
+       are reachable without a pointer from the badges over the drawing. -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <svg
     class="h-full w-full select-none"
     viewBox="{-halfWidth} {-centerY} {halfWidth * 2} {halfHeight * 2}"
     role="img"
     aria-label={description}
     data-testid="section-view"
+    onpointerover={(event) => lab.hover(targetOf(event))}
+    onpointerleave={() => lab.hover(null)}
+    onclick={(event) => {
+      const target = targetOf(event);
+      if (target) lab.togglePin(target);
+    }}
   >
     <defs>
       {#each lattices as lattice (lattice.id)}
@@ -188,12 +250,51 @@
     <polygon
       points={outline}
       fill="#f59e0b"
-      fill-opacity="0.85"
+      fill-opacity={areaActive ? 1 : 0.85}
       stroke="#b45309"
       stroke-width="3"
       stroke-linejoin="round"
+      class="cursor-pointer"
+      data-target={areaTarget}
       data-testid="section-shape"
     />
+
+    {#if areaActive}
+      {#each heights as height (height.id)}
+        <line
+          x1={height.x1}
+          y1={height.y1}
+          x2={height.x2}
+          y2={height.y2}
+          stroke="#7c2d12"
+          stroke-width="2"
+          stroke-dasharray="6 4"
+          pointer-events="none"
+          data-testid="section-height"
+        />
+      {/each}
+    {/if}
+
+    {#each sides as side (side.id)}
+      {#if side.active}
+        <line
+          {...side.line}
+          stroke="#c2410c"
+          stroke-width="6"
+          stroke-linecap="round"
+          pointer-events="none"
+        />
+      {/if}
+      <!-- A fat invisible line is what the pointer actually has to hit. -->
+      <line
+        {...side.line}
+        stroke="transparent"
+        stroke-width="16"
+        stroke-linecap="round"
+        class="cursor-pointer"
+        data-target={side.target}
+      />
+    {/each}
   </svg>
 
   <!-- Lengths and the area are text over the drawing, so they read and
@@ -204,44 +305,93 @@
     class:invisible={!measured}
   >
     {#each sides as side (side.id)}
-      <span
-        class="absolute -translate-x-1/2 -translate-y-1/2 rounded-md bg-panel/85 px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap text-ink shadow-sm"
+      <button
+        type="button"
+        class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-md border px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap shadow-sm {side.active
+          ? 'border-flag bg-flag-soft text-flag'
+          : 'border-transparent bg-panel/85 text-ink hover:border-accent hover:text-accent'} pointer-events-auto"
+        class:ring-2={side.pinned}
+        class:ring-flag={side.pinned}
         style:left="{side.x}px"
         style:top="{side.y}px"
         data-testid="section-side"
         data-value={side.value}
+        data-target={side.target}
+        aria-pressed={side.pinned}
         aria-label={t("slice.side", { value: side.value, unit: linear })}
-        ><MathText text={side.value} /></span
+        onpointerenter={() => lab.hover(side.target)}
+        onpointerleave={() => lab.unhover(side.target)}
+        onfocus={() => lab.hover(side.target)}
+        onblur={() => lab.unhover(side.target)}
+        onclick={() => lab.togglePin(side.target)}
+        >{#if side.active && side.symbol}{`${side.symbol} = `}{/if}<MathText
+          text={side.value}
+        />{#if side.active}{` ${linear}`}{#if formatApproximate(side.approximate).rounded}<span
+              class="font-normal text-ink-soft"
+              >{` (${approximateText(side.approximate)})`}</span
+            >{/if}{/if}</button
       >
     {/each}
 
-    <section
-      class="pointer-events-auto absolute -translate-x-1/2 rounded-xl border border-rule/70 bg-panel/90 px-3 py-2 text-center shadow-lg shadow-ink/10 backdrop-blur-md"
+    {#if areaActive}
+      {#each heights as height (height.id)}
+        <span
+          class="absolute -translate-y-1/2 rounded-md border border-[#7c2d12]/40 bg-panel/90 px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap text-[#7c2d12] shadow-sm"
+          style:left="{height.x}px"
+          style:top="{height.y}px"
+          data-testid="section-height-label"
+          >{height.symbol} = <MathText text={height.value} /></span
+        >
+      {/each}
+    {/if}
+
+    <!-- The card is the cross section's own badge: pointing at it, focusing
+         it or clicking it measures the cross section, opening up its working
+         whatever the fx control says, as pointing at the drawing does. -->
+    <button
+      type="button"
+      class="absolute -translate-x-1/2 cursor-pointer rounded-xl border px-3 py-2 text-center shadow-lg shadow-ink/10 backdrop-blur-md {areaActive
+        ? 'border-flag bg-panel/95'
+        : 'border-rule/70 bg-panel/90 hover:border-accent'} pointer-events-auto"
+      class:ring-2={lab.isPinned(areaTarget)}
+      class:ring-flag={lab.isPinned(areaTarget)}
       style:left="{halfWidth}px"
       style:top="{cardTop}px"
-      aria-label={t("slice.area")}
+      aria-pressed={lab.isPinned(areaTarget)}
+      aria-label="{t('slice.area')}{lab.answersVisible
+        ? `: ${name}, ${formatExact(section.area.exact)} ${areaUnit}`
+        : ''}"
       data-testid="section-card"
+      data-target={areaTarget}
+      onpointerenter={() => lab.hover(areaTarget)}
+      onpointerleave={() => lab.unhover(areaTarget)}
+      onfocus={() => lab.hover(areaTarget)}
+      onblur={() => lab.unhover(areaTarget)}
+      onclick={() => lab.togglePin(areaTarget)}
     >
-      <p class="text-sm font-bold text-ink" data-testid="section-name">
+      <span class="block text-sm font-bold text-ink" data-testid="section-name">
         {#if lab.answersVisible}{name}{:else}<span
             data-testid="section-name-hidden">?</span
           >{/if}
-      </p>
-      {#if lab.showFormulas && section.area.formula}
-        <p
-          class="font-mono text-xs text-ink-soft"
+      </span>
+      {#if (areaActive || lab.showFormulas) && section.area.formula}
+        <span
+          class="block font-mono text-xs text-ink-soft"
           data-testid="section-formula"
         >
           <MathText text={section.area.formula} />
-        </p>
+        </span>
         {#if section.area.substitution}
-          <p class="font-mono text-xs text-ink-soft">
+          <span
+            class="block font-mono text-xs text-ink-soft"
+            data-testid="section-substitution"
+          >
             <MathText text={section.area.substitution} />
-          </p>
+          </span>
         {/if}
       {/if}
-      <p
-        class="font-mono text-base whitespace-nowrap"
+      <span
+        class="block font-mono text-base whitespace-nowrap text-ink"
         data-testid="section-area"
       >
         A =
@@ -256,7 +406,7 @@
         {:else}
           <span data-testid="section-area-hidden">?</span>
         {/if}
-      </p>
-    </section>
+      </span>
+    </button>
   </div>
 </div>

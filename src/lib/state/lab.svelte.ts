@@ -50,9 +50,12 @@ export type { ViewMode };
 /**
  * What the pointer is on, or what has been pinned. A surface target names one
  * external surface; a measure target names a length — every edge that carries
- * that length responds together.
+ * that length responds together. A section target names one side of the cross
+ * section, or the cross section itself (`section:area`), on the face-on
+ * drawing and on the solid at once.
  */
-export type Target = `surface:${string}` | `measure:${string}`;
+export type Target =
+  `surface:${string}` | `measure:${string}` | `section:${string}`;
 
 export function surfaceTarget(surfaceId: string): Target {
   return `surface:${surfaceId}`;
@@ -60,6 +63,11 @@ export function surfaceTarget(surfaceId: string): Target {
 
 export function measureTarget(key: string): Target {
   return `measure:${key}`;
+}
+
+/** A side of the cross section by its edge id, or `area` for the whole of it. */
+export function sectionTarget(id: string): Target {
+  return `section:${id}`;
 }
 
 /** A length the solid can show: an independent dimension or a derived one. */

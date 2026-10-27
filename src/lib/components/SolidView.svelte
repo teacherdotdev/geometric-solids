@@ -15,6 +15,7 @@
   import { domainText, t, unitLabels } from "$lib/i18n/index.svelte";
   import {
     measureTarget,
+    sectionTarget,
     surfaceTarget,
     type LabState,
     type Target,
@@ -328,7 +329,20 @@
         corner(-1, 1),
       ]),
       outline: projectAll(section.outline3d),
-      travel: { from, to, mid: [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2] },
+      travel: { from, to, mid: [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2] }, // Each side of the cut, so it can be pointed at here and light up on the
+      // face-on drawing, and the other way round.
+      sides: section.edges.map((edge) => {
+        const [x1, y1] = at(edge.from3d);
+        const [x2, y2] = at(edge.to3d);
+        const target = sectionTarget(edge.id);
+        return { id: edge.id, target, x1, y1, x2, y2 };
+      }),
+      heights: section.lines.map((line) => {
+        const [x1, y1] = at(line.from3d);
+        const [x2, y2] = at(line.to3d);
+        return { id: line.id, x1, y1, x2, y2 };
+      }),
+
       angle,
     };
   });
@@ -749,9 +763,10 @@
       <polygon
         points={slicing.outline}
         fill="#f59e0b"
-        fill-opacity="0.85"
+        fill-opacity={lab.isActive(sectionTarget("area")) ? 1 : 0.85}
         stroke="none"
-        pointer-events="none"
+        class="cursor-pointer"
+        data-target={sectionTarget("area")}
         data-testid="section-on-solid"
       />
       {#each nearFacets as facet, index (index)}
@@ -774,6 +789,47 @@
         stroke-linejoin="round"
         pointer-events="none"
       />
+      {#if lab.isActive(sectionTarget("area"))}
+        {#each slicing.heights as height (height.id)}
+          <line
+            x1={height.x1}
+            y1={height.y1}
+            x2={height.x2}
+            y2={height.y2}
+            stroke="#7c2d12"
+            stroke-width="2"
+            stroke-dasharray="6 4"
+            pointer-events="none"
+          />
+        {/each}
+      {/if}
+      {#each slicing.sides as side (side.id)}
+        {#if lab.isActive(side.target)}
+          <line
+            x1={side.x1}
+            y1={side.y1}
+            x2={side.x2}
+            y2={side.y2}
+            stroke="#c2410c"
+            stroke-width="6"
+            stroke-linecap="round"
+            pointer-events="none"
+            data-testid="section-side-on-solid"
+          />
+        {/if}
+        <line
+          x1={side.x1}
+          y1={side.y1}
+          x2={side.x2}
+          y2={side.y2}
+          stroke="transparent"
+          stroke-width="14"
+          stroke-linecap="round"
+          class="cursor-pointer"
+          data-target={side.target}
+          data-section-side={side.id}
+        />
+      {/each}
       <line
         x1={slicing.travel.from[0]}
         y1={slicing.travel.from[1]}

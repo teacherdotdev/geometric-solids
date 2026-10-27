@@ -509,6 +509,97 @@ test("slices vertically and diagonally, turning a quarter at a time", async ({
   await expect(page.getByTestId("volume-total")).toContainText("8");
 });
 
+test("measures the cross section's sides and area, on both drawings", async ({
+  page,
+}) => {
+  await page.getByTestId("view-slice").click();
+  const sides = page.getByTestId("section-side");
+
+  // Pointing at a side of the face-on drawing lights the same side of the cut
+  // on the solid.
+  await expect(page.getByTestId("section-side-on-solid")).toHaveCount(0);
+  await sides.first().hover();
+  await expect(page.getByTestId("section-side-on-solid")).toHaveCount(1);
+  await expect(sides.first()).toContainText("units");
+
+  // And the other way round: a side of the cut on the solid lights its length.
+  await page.getByTestId("shape-rectangularPrism").hover();
+  await expect(page.getByTestId("section-side-on-solid")).toHaveCount(0);
+  const onSolid = page
+    .getByTestId("solid-view")
+    .locator('line[data-section-side="e0"]');
+  const at = await onSolid.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+  await page.mouse.move(at.x, at.y);
+  await expect(
+    page.locator('[data-testid="section-side"][data-target="section:e0"]'),
+  ).toContainText("units");
+
+  // Clicking keeps it on screen once the pointer has gone.
+  await sides.nth(1).click();
+  await page.getByTestId("shape-rectangularPrism").hover();
+  await expect(sides.nth(1)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("section-side-on-solid")).toHaveCount(1);
+  await sides.nth(1).click();
+  await page.getByTestId("shape-rectangularPrism").hover();
+  await expect(page.getByTestId("section-side-on-solid")).toHaveCount(0);
+
+  // Pointing at the cross section shows how its area is worked out.
+  await expect(page.getByTestId("section-formula")).toHaveCount(0);
+  await page.getByTestId("section-card").hover();
+  await expect(page.getByTestId("section-formula")).toContainText("A = lw");
+  await expect(page.getByTestId("section-substitution")).toContainText(
+    "A = 3 × 4",
+  );
+  await expect(page.getByTestId("section-area")).toContainText("12");
+});
+
+test("measures the cross section from the keyboard alone", async ({ page }) => {
+  await page.getByTestId("view-slice").click();
+
+  await page.getByTestId("section-side").first().focus();
+  await expect(page.getByTestId("section-side-on-solid")).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("section-side").first()).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await page.getByTestId("section-card").focus();
+  await expect(page.getByTestId("section-formula")).toContainText("A = lw");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("section-card")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByTestId("input-slice-position").focus();
+  await expect(page.getByTestId("section-formula")).toContainText("A = lw");
+});
+
+test("keeps the cross section's working, not its area, when answers are hidden", async ({
+  page,
+}) => {
+  await page.getByTestId("view-slice").click();
+  await page.getByTestId("toggle-answers").click();
+  await page.getByTestId("section-card").hover();
+
+  await expect(page.getByTestId("section-formula")).toContainText("A = lw");
+  await expect(page.getByTestId("section-substitution")).toContainText(
+    "A = 3 × 4",
+  );
+  await expect(page.getByTestId("section-area-hidden")).toBeVisible();
+  await expect(page.getByTestId("section-card")).not.toHaveAttribute(
+    "aria-label",
+    /12/,
+  );
+  await expect(page.getByTestId("section-card")).not.toHaveAttribute(
+    "aria-label",
+    /Rectangle/,
+  );
+});
+
 test("keeps the slice inside the solid", async ({ page }) => {
   await page.getByTestId("view-slice").click();
 

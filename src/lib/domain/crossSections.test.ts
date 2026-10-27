@@ -296,3 +296,50 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
     expect(cosine).toBeCloseTo(Math.SQRT1_2);
   });
 });
+
+describe("the working for a cross section's area", () => {
+  it("names the sides its formula uses", () => {
+    const section = cut("rectangularPrism", PRISM, sliceOf("right", 2.5));
+    expect(section.area.formula).toBe("A = lw");
+    const length = (id: string) =>
+      formatExact(section.edges.find((edge) => edge.id === id)!.length);
+    expect(length(section.symbols.l)).toBe("4");
+    expect(length(section.symbols.w)).toBe("2.5√2");
+  });
+
+  it("draws a height that is not a side as a line of its own, square to the base", () => {
+    for (const position of [1, 3]) {
+      const section = cut(
+        "squarePyramid",
+        { b: 6, h: 4 },
+        sliceOf("frontToBack", position),
+      );
+      const [height] = section.lines;
+      expect(height.symbol).toBe("h");
+      const flat = Math.hypot(
+        height.to2d[0] - height.from2d[0],
+        height.to2d[1] - height.from2d[1],
+      );
+      const solid = Math.hypot(
+        height.to3d[0] - height.from3d[0],
+        height.to3d[1] - height.from3d[1],
+        height.to3d[2] - height.from3d[2],
+      );
+      expect(evalExact(height.length)).toBeCloseTo(flat, 9);
+      expect(evalExact(height.length)).toBeCloseTo(solid, 9);
+
+      const base = section.edges.find(
+        (edge) => edge.id === (section.symbols.b ?? section.symbols["b₁"]),
+      )!;
+      const along = [
+        base.to2d[0] - base.from2d[0],
+        base.to2d[1] - base.from2d[1],
+      ];
+      const up = [
+        height.to2d[0] - height.from2d[0],
+        height.to2d[1] - height.from2d[1],
+      ];
+      expect(along[0] * up[0] + along[1] * up[1]).toBeCloseTo(0, 9);
+    }
+  });
+});
