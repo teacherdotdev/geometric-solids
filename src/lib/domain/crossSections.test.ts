@@ -205,3 +205,94 @@ describe("every cross section", () => {
     }
   });
 });
+
+function sliceOf(heading: SliceHeading, position: number): Slice {
+  const direction =
+    heading === "level"
+      ? "horizontal"
+      : heading === "frontToBack" || heading === "sideToSide"
+        ? "vertical"
+        : "diagonal";
+  return { direction, heading, position: fromTenths(position) };
+}
+
+describe("vertical and diagonal slices of a rectangular prism and a cube", () => {
+  it("cut a cube corner to corner in a 2 by 2√2 rectangle", () => {
+    const section = cut("cube", { s: 2 }, sliceOf("right", 2));
+    expect(section.name).toBe("Rectangle");
+    expect(lengths("cube", { s: 2 }, sliceOf("right", 2))).toEqual([
+      "2",
+      "2",
+      "2√2",
+      "2√2",
+    ]);
+    expect(formatExact(section.area.exact)).toBe("4√2");
+    expect(section.area.substitution).toBe("A = 2 × 2√2");
+  });
+
+  it("only ever give rectangles and squares", () => {
+    const headings = Object.values(SLICE_HEADINGS).flat() as SliceHeading[];
+    for (const [kind, d] of [
+      ["rectangularPrism", PRISM],
+      ["cube", { s: 2 }],
+    ] as const) {
+      for (const heading of headings) {
+        const span = toNumber(sliceSpan(kind, d, heading)!);
+        for (let tenths = 1; tenths < span * 10; tenths += 1) {
+          const section = cut(kind, d, sliceOf(heading, tenths / 10));
+          expect(["Rectangle", "Square"]).toContain(section.name);
+        }
+      }
+    }
+  });
+
+  it("measure the position from the left, from the back, or along the slide", () => {
+    expect(toNumber(sliceSpan("rectangularPrism", PRISM, "frontToBack")!)).toBe(
+      3,
+    );
+    expect(toNumber(sliceSpan("rectangularPrism", PRISM, "sideToSide")!)).toBe(
+      4,
+    );
+    // A diagonal slides from one top edge to the opposite bottom one: the length
+    // plus the height.
+    expect(toNumber(sliceSpan("rectangularPrism", PRISM, "right")!)).toBe(8);
+    expect(toNumber(sliceSpan("rectangularPrism", PRISM, "front")!)).toBe(9);
+
+    const vertical = cut("rectangularPrism", PRISM, sliceOf("frontToBack", 1));
+    expect(
+      lengths("rectangularPrism", PRISM, sliceOf("frontToBack", 1)),
+    ).toEqual(["4", "4", "5", "5"]);
+    // Measured in from the left, which the mesh puts at x = -1.5.
+    for (const [x] of vertical.outline3d) expect(x).toBeCloseTo(-0.5);
+  });
+
+  it("draw the position as a line as long as it, from where the plane first touched", () => {
+    for (const heading of ["level", "frontToBack", "right", "back"] as const) {
+      const section = cut("cube", { s: 2 }, sliceOf(heading, 1.5));
+      const { from3d, to3d } = section.travel;
+      expect(
+        Math.hypot(
+          to3d[0] - from3d[0],
+          to3d[1] - from3d[1],
+          to3d[2] - from3d[2],
+        ),
+      ).toBeCloseTo(1.5);
+    }
+  });
+
+  it("mark a right angle for a vertical slice, 45° for a diagonal, and none level", () => {
+    expect(cut("cube", { s: 2 }, sliceOf("level", 1)).angle).toBeNull();
+    expect(cut("cube", { s: 2 }, sliceOf("sideToSide", 1)).angle?.degrees).toBe(
+      90,
+    );
+    const diagonal = cut("cube", { s: 2 }, sliceOf("left", 2)).angle!;
+    expect(diagonal.degrees).toBe(45);
+    // The mark sits on the bottom face's level, which the mesh puts at y = -1.
+    expect(diagonal.at[1]).toBeCloseTo(-1);
+    const cosine =
+      diagonal.floor[0] * diagonal.rise[0] +
+      diagonal.floor[1] * diagonal.rise[1] +
+      diagonal.floor[2] * diagonal.rise[2];
+    expect(cosine).toBeCloseTo(Math.SQRT1_2);
+  });
+});

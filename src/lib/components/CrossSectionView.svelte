@@ -209,6 +209,7 @@
         style:left="{side.x}px"
         style:top="{side.y}px"
         data-testid="section-side"
+        data-value={side.value}
         aria-label={t("slice.side", { value: side.value, unit: linear })}
         ><MathText text={side.value} /></span
       >

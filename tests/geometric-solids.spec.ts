@@ -406,8 +406,11 @@ function agreeWithin(a: number[], b: number[], slack: number) {
 
 /** The side lengths written around the face-on cross section, sorted. */
 async function sectionSides(page: Page): Promise<string[]> {
-  const sides = await page.getByTestId("section-side").allInnerTexts();
-  return sides.map((side) => side.trim()).sort();
+  const sides = page.getByTestId("section-side");
+  const values = await sides.evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-value") ?? ""),
+  );
+  return values.sort();
 }
 
 test("slices a solid and draws the cross section face-on", async ({ page }) => {
@@ -439,6 +442,71 @@ test("slices a solid and draws the cross section face-on", async ({ page }) => {
   await expect(page.getByTestId("input-slice-position")).toHaveValue("0.6");
   await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
   expect(await totals(page)).toEqual(before);
+});
+
+test("slices vertically and diagonally, turning a quarter at a time", async ({
+  page,
+}) => {
+  await page.getByTestId("view-slice").click();
+  await expect(page.getByTestId("slice-horizontal")).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  // Level slices face one way only, and make no angle with the bottom face.
+  await expect(page.getByTestId("slice-turn")).toHaveCount(0);
+  await expect(page.getByTestId("slice-angle")).toHaveCount(0);
+  await expect(page.getByTestId("slice-travel")).toBeAttached();
+
+  // The textbook's words are the buttons' descriptions.
+  await expect(
+    page.getByTestId("slice-horizontal"),
+  ).toHaveAccessibleDescription("Parallel to the bottom face");
+  await expect(page.getByTestId("slice-vertical")).toHaveAccessibleDescription(
+    "Perpendicular to the bottom face",
+  );
+
+  // Front to back through a 3 × 4 × 5 prism, 2.5 in from the left: 4 by 5.
+  await page.getByTestId("slice-vertical").click();
+  await expect(page.getByTestId("slice-heading")).toHaveText("front to back");
+  await expect(page.getByTestId("input-slice-position")).toHaveValue("2.5");
+  await expect(page.getByTestId("slice-angle-label")).toHaveText("90°");
+  expect(await sectionSides(page)).toEqual(["4", "4", "5", "5"]);
+
+  // A quarter turn: side to side, 3 by 5. The position stays where it was.
+  await page.getByTestId("slice-turn").click();
+  await expect(page.getByTestId("slice-heading")).toHaveText("side to side");
+  await expect(page.getByTestId("input-slice-position")).toHaveValue("2.5");
+  expect(await sectionSides(page)).toEqual(["3", "3", "5", "5"]);
+  await page.getByTestId("slice-turn").click();
+  await expect(page.getByTestId("slice-heading")).toHaveText("front to back");
+
+  // Corner to corner through a cube: a rectangle 2 by 2√2.
+  await page.getByTestId("shape-cube").click();
+  await page.getByTestId("slice-diagonal").click();
+  await expect(page.getByTestId("slice-heading")).toHaveText(
+    "rising to the right",
+  );
+  await page.getByTestId("input-slice-position").fill("2");
+  await expect(page.getByTestId("slice-angle-label")).toHaveText("45°");
+  await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
+  expect(await sectionSides(page)).toEqual(["2", "2", "2√2", "2√2"]);
+  await expect(page.getByTestId("section-area")).toContainText("4√2");
+
+  // Every diagonal of a cube is the same rectangle, turned.
+  for (const heading of [
+    "rising to the back",
+    "rising to the left",
+    "rising to the front",
+    "rising to the right",
+  ]) {
+    await page.getByTestId("slice-turn").click();
+    await expect(page.getByTestId("slice-heading")).toHaveText(heading);
+    await expect(page.getByTestId("section-area")).toContainText("4√2");
+  }
+
+  // Slicing never changes the solid.
+  await expect(page.getByTestId("surface-total")).toContainText("24");
+  await expect(page.getByTestId("volume-total")).toContainText("8");
 });
 
 test("keeps the slice inside the solid", async ({ page }) => {

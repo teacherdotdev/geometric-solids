@@ -269,6 +269,57 @@
       origin[1] + (across[1] * i + up[1] * j) * reachOut,
       origin[2] + (across[2] * i + up[2] * j) * reachOut,
     ];
+    const at = (point: Vec3) =>
+      projectPoint(rotatePoint(point, lab.yaw, lab.pitch), scale);
+    const along = (from: Vec3, direction: Vec3, length: number): Vec3 => [
+      from[0] + direction[0] * length,
+      from[1] + direction[1] * length,
+      from[2] + direction[2] * length,
+    ];
+
+    // What the position measures: a dashed line from where the plane first
+    // touched the solid to the middle of the cut.
+    const from = at(section.travel.from3d);
+    const to = at(section.travel.to3d);
+
+    // The angle the plane makes with the bottom face, opening from the floor
+    // up the plane: a square for a right angle, an arc for 45°.
+    let angle = null;
+    if (section.angle) {
+      const { at: corner3d, floor, rise, degrees } = section.angle;
+      const arm = lab.mesh.extent * 0.32;
+      const mark = arm * 0.45;
+      const blend = (share: number): Vec3 => {
+        const mixed: Vec3 = [
+          floor[0] * (1 - share) + rise[0] * share,
+          floor[1] * (1 - share) + rise[1] * share,
+          floor[2] * (1 - share) + rise[2] * share,
+        ];
+        const length = Math.hypot(...mixed);
+        return [mixed[0] / length, mixed[1] / length, mixed[2] / length];
+      };
+      const arc =
+        degrees === 90
+          ? [
+              along(corner3d, floor, mark),
+              along(along(corner3d, floor, mark), rise, mark),
+              along(corner3d, rise, mark),
+            ]
+          : Array.from({ length: 9 }, (_, i) =>
+              along(corner3d, blend(i / 8), mark),
+            );
+      angle = {
+        arms: projectAll([
+          along(corner3d, floor, arm),
+          corner3d,
+          along(corner3d, rise, arm),
+        ]),
+        arc: projectAll(arc),
+        label: at(along(corner3d, blend(0.5), arm * 0.8)),
+        degrees,
+      };
+    }
+
     return {
       sheet: projectAll([
         corner(-1, -1),
@@ -277,6 +328,8 @@
         corner(-1, 1),
       ]),
       outline: projectAll(section.outline3d),
+      travel: { from, to, mid: [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2] },
+      angle,
     };
   });
 
@@ -721,6 +774,38 @@
         stroke-linejoin="round"
         pointer-events="none"
       />
+      <line
+        x1={slicing.travel.from[0]}
+        y1={slicing.travel.from[1]}
+        x2={slicing.travel.to[0]}
+        y2={slicing.travel.to[1]}
+        stroke="#7c2d12"
+        stroke-width="2"
+        stroke-dasharray="5 4"
+        stroke-linecap="round"
+        pointer-events="none"
+        data-testid="slice-travel"
+      />
+      <circle
+        cx={slicing.travel.from[0]}
+        cy={slicing.travel.from[1]}
+        r="3.5"
+        fill="#7c2d12"
+        pointer-events="none"
+      />
+      {#if slicing.angle}
+        <g
+          fill="none"
+          stroke="#7c2d12"
+          stroke-width="1.8"
+          stroke-linejoin="round"
+          pointer-events="none"
+          data-testid="slice-angle"
+        >
+          <polyline points={slicing.angle.arms} />
+          <polyline points={slicing.angle.arc} />
+        </g>
+      {/if}
     {:else}
       {#each facets as facet, index (index)}
         <polygon
@@ -798,6 +883,22 @@
     class="pointer-events-none absolute inset-0 overflow-hidden"
     class:invisible={!measured}
   >
+    {#if slicing && lab.slicePosition !== null}
+      <span
+        class="absolute -translate-x-1/2 -translate-y-1/2 rounded-md border border-[#7c2d12]/40 bg-panel/90 px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap text-[#7c2d12] shadow-sm"
+        style:left="{halfWidth + slicing.travel.mid[0]}px"
+        style:top="{centerY + slicing.travel.mid[1]}px"
+        data-testid="slice-travel-label">{lab.slicePosition}</span
+      >
+    {/if}
+    {#if slicing?.angle}
+      <span
+        class="absolute -translate-x-1/2 -translate-y-1/2 font-mono text-xs font-bold text-[#7c2d12]"
+        style:left="{halfWidth + slicing.angle.label[0]}px"
+        style:top="{centerY + slicing.angle.label[1]}px"
+        data-testid="slice-angle-label">{slicing.angle.degrees}°</span
+      >
+    {/if}
     {#each badges as badge (badge.surface.id)}
       <button
         type="button"

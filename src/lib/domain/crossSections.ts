@@ -163,6 +163,22 @@ export interface CrossSection {
     readonly across: Vec3;
     readonly up: Vec3;
   };
+  /**
+   * What the slice position measures, drawn on the solid: from the middle of
+   * what the plane touches first, along its one axis, to the plane as it is.
+   */
+  readonly travel: { readonly from3d: Vec3; readonly to3d: Vec3 };
+  /**
+   * Where the plane meets the bottom face's level, and the two directions the
+   * angle between them opens along. Null for a horizontal slice, which is
+   * parallel to the bottom face and makes no angle with it.
+   */
+  readonly angle: {
+    readonly at: Vec3;
+    readonly floor: Vec3;
+    readonly rise: Vec3;
+    readonly degrees: 45 | 90;
+  } | null;
 }
 
 type RVec3 = readonly [Rational, Rational, Rational];
@@ -179,6 +195,8 @@ interface Polyhedron {
 interface PlaneFrame {
   /** The normal. Its component along the slide axis is 1. */
   readonly normal: IVec3;
+  /** The one axis the plane moves along. */
+  readonly slide: IVec3;
   /** The drawing's x axis: a unit vector lying in the plane. */
   readonly across: IVec3;
   /** The drawing's y axis: a whole-number vector in the plane, length 1 or √2. */
@@ -187,16 +205,51 @@ interface PlaneFrame {
 
 const FRAMES: Record<SliceHeading, PlaneFrame> = {
   // Seen from above, with the back of the solid at the top of the drawing.
-  level: { normal: [0, 1, 0], across: [1, 0, 0], up: [0, 0, -1] },
+  level: {
+    normal: [0, 1, 0],
+    slide: [0, 1, 0],
+    across: [1, 0, 0],
+    up: [0, 0, -1],
+  },
   // Seen from the left side.
-  frontToBack: { normal: [1, 0, 0], across: [0, 0, 1], up: [0, 1, 0] },
+  frontToBack: {
+    normal: [1, 0, 0],
+    slide: [1, 0, 0],
+    across: [0, 0, 1],
+    up: [0, 1, 0],
+  },
   // Seen from the front.
-  sideToSide: { normal: [0, 0, 1], across: [1, 0, 0], up: [0, 1, 0] },
+  sideToSide: {
+    normal: [0, 0, 1],
+    slide: [0, 0, 1],
+    across: [1, 0, 0],
+    up: [0, 1, 0],
+  },
   // Each diagonal is seen square-on from above it, uphill at the top.
-  right: { normal: [1, -1, 0], across: [0, 0, 1], up: [1, 1, 0] },
-  left: { normal: [1, 1, 0], across: [0, 0, -1], up: [-1, 1, 0] },
-  front: { normal: [0, -1, 1], across: [-1, 0, 0], up: [0, 1, 1] },
-  back: { normal: [0, 1, 1], across: [1, 0, 0], up: [0, 1, -1] },
+  right: {
+    normal: [1, -1, 0],
+    slide: [1, 0, 0],
+    across: [0, 0, 1],
+    up: [1, 1, 0],
+  },
+  left: {
+    normal: [1, 1, 0],
+    slide: [1, 0, 0],
+    across: [0, 0, -1],
+    up: [-1, 1, 0],
+  },
+  front: {
+    normal: [0, -1, 1],
+    slide: [0, 0, 1],
+    across: [-1, 0, 0],
+    up: [0, 1, 1],
+  },
+  back: {
+    normal: [0, 1, 1],
+    slide: [0, 0, 1],
+    across: [1, 0, 0],
+    up: [0, 1, -1],
+  },
 };
 
 const HALF = rational(1n, 2n);
@@ -554,6 +607,38 @@ export function cutSolid(
     const length = Math.hypot(v[0], v[1], v[2]);
     return [v[0] / length, v[1] / length, v[2] / length];
   };
+  // Where the plane first touched the solid: the middle of the face, edge or
+  // corner it met first. The position is measured from there.
+  const touching = solid.vertices.filter((vertex) =>
+    equals(dotI(frame.normal, vertex), low),
+  );
+  const touch: RVec3 = [0, 1, 2].map((i) =>
+    touching.reduce(
+      (sum, vertex) =>
+        add(sum, mul(vertex[i], rational(1n, BigInt(touching.length)))),
+      ZERO,
+    ),
+  ) as unknown as RVec3;
+  const shift = (point: RVec3, by: IVec3, times: Rational): RVec3 =>
+    point.map((value, i) =>
+      add(value, mul(rational(-by[i]), times)),
+    ) as unknown as RVec3;
+  // Every plane but the level one climbs one unit per |up|, so following `up`
+  // down from the middle of the cross section reaches the bottom face's level
+  // after as many steps as the middle is high.
+  const foot = shift(centreAt, frame.up, centreAt[1]);
+  const flatUp: IVec3 = [frame.up[0], 0, frame.up[2]];
+  const angle =
+    slice.heading === "level"
+      ? null
+      : {
+          at: onSolid(foot),
+          floor: unit(
+            flatUp[0] === 0 && flatUp[2] === 0 ? frame.normal : flatUp,
+          ),
+          rise: unit(frame.up),
+          degrees: (flatUp[0] === 0 && flatUp[2] === 0 ? 90 : 45) as 45 | 90,
+        };
 
   return {
     shape,
@@ -573,6 +658,13 @@ export function cutSolid(
       across: unit(frame.across),
       up: unit(frame.up),
     },
+    travel: {
+      from3d: onSolid(touch),
+      to3d: onSolid(
+        shift(touch, frame.slide, mul(slice.position, rational(-1))),
+      ),
+    },
+    angle,
   };
 }
 
