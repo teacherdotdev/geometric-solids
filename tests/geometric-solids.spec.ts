@@ -468,13 +468,21 @@ test("lays the cross section over the solid in a round window", async ({
   await page.getByTestId("view-slice").click();
   const viewport = page.viewportSize()!;
 
-  // The cut is a circle at the right; the solid moves over to the left of it.
+  // The cut is a circle at the right; the solid moves over to the left of it,
+  // and both are drawn at one scale, so one key to the grid serves both.
+  await expect(page.getByTestId("grid-key")).toHaveCount(1);
   const section = (await page.getByTestId("section-view").boundingBox())!;
   expect(section.width).toBeCloseTo(section.height, 0);
   expect(section.x).toBeGreaterThan(viewport.width / 2);
   const handle = (await page.getByTestId("slice-handle").boundingBox())!;
   expect(handle.x + handle.width).toBeLessThan(section.x);
   expect(handle.x + handle.width / 2).toBeLessThan(viewport.width / 2);
+
+  // Opening up the working under the area leaves the window where it was.
+  await page.getByTestId("section-card").hover();
+  await expect(page.getByTestId("section-formula")).toBeVisible();
+  expect(await page.getByTestId("section-view").boundingBox()).toEqual(section);
+  await page.mouse.move(0, viewport.height / 2);
 
   // The slice controls sit in the top right, under the view tabs, and hold
   // only the three directions and, where it can turn, a turn button.
@@ -635,13 +643,13 @@ test("measures the cross section's sides and area, on both drawings", async ({
   const sides = page.getByTestId("section-side");
 
   // Pointing at a side of the face-on drawing lights the same side of the cut
-  // on the solid.
+  // on the solid, while the drawing itself holds still.
   await expect(page.getByTestId("section-side-on-solid")).toHaveCount(0);
   await sides.first().hover();
   await expect(page.getByTestId("section-side-on-solid")).toHaveCount(1);
-  await expect(sides.first()).toContainText("units");
+  await expect(sides.first()).toHaveText("3");
 
-  // And the other way round: a side of the cut on the solid lights its length.
+  // Pointing at a side of the cut on the solid leaves the drawing alone too.
   await page.getByTestId("shape-rectangularPrism").hover();
   await expect(page.getByTestId("section-side-on-solid")).toHaveCount(0);
   const onSolid = page
@@ -652,9 +660,10 @@ test("measures the cross section's sides and area, on both drawings", async ({
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   });
   await page.mouse.move(at.x, at.y);
+  await expect(page.getByTestId("section-side-on-solid")).toHaveCount(1);
   await expect(
     page.locator('[data-testid="section-side"][data-target="section:e0"]'),
-  ).toContainText("units");
+  ).not.toContainText("units");
 
   // Clicking keeps it on screen once the pointer has gone.
   await sides.nth(1).click();

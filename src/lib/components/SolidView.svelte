@@ -47,6 +47,7 @@
     lift = 0,
     chrome = 0,
     shift = 0,
+    pixelsPerUnit,
     onGrid,
   }: {
     lab: LabState;
@@ -72,6 +73,11 @@
      * shape is fitted to what is left of the width beside it.
      */
     shift?: number;
+    /**
+     * A scale set by the lab rather than fitted here, for a drawing whose size
+     * has to agree with another one beside it.
+     */
+    pixelsPerUnit?: number;
     /**
      * Where to report the size of one grid square, in the shape's own units.
      * The step is settled here, out of the fit to this element, but it is read
@@ -109,12 +115,13 @@
   /** The extent of the largest solid the sliders reach: a sphere of radius 20. */
   const FULL_EXTENT = DIMENSION_MAX;
   const scale = $derived(
-    // The fit is measured against the clear band, not the window, so the solid
-    // grows into the room it actually has.
-    (Math.min(centerX, room) *
-      0.78 *
-      fitFraction(lab.mesh.extent, FULL_EXTENT)) /
-      lab.mesh.extent,
+    pixelsPerUnit ??
+      // The fit is measured against the clear band, not the window, so the
+      // solid grows into the room it actually has.
+      (Math.min(centerX, room) *
+        0.78 *
+        fitFraction(lab.mesh.extent, FULL_EXTENT)) /
+        lab.mesh.extent,
   );
 
   /**

@@ -16,11 +16,14 @@
   import TotalsCard from "$lib/components/TotalsCard.svelte";
   import ViewToggle from "$lib/components/ViewToggle.svelte";
   import { UNIT_ORDER } from "$lib/domain/format";
+  import { DIMENSION_MAX } from "$lib/domain/types";
   import type { UnitKey } from "$lib/domain/format";
   import type { SolidKind } from "$lib/domain/types";
   import { t, unitLabels } from "$lib/i18n/index.svelte";
   import type { LabState, ViewMode } from "$lib/state/lab.svelte";
+  import { fitFraction } from "$lib/ui/grid";
   import { measureBox } from "$lib/ui/measureBox";
+  import { stageRoom } from "$lib/ui/stage";
 
   let {
     lab,
@@ -118,23 +121,45 @@
   const chrome = $derived(floating ? topHeight + bottomHeight : 0);
 
   // The slice view's round window hangs at the right edge, between the view
-  // controls above it and the row of panels along the bottom, so it measures
-  // what those two have left of the window's height there. The whole row
+  // controls above it and the row of panels along the bottom. The whole row
   // counts, not just the answers: on a phone the row stacks into a column.
+  let stageWidth = $state(0);
   let stageHeight = $state(0);
-  let portholeWidth = $state(0);
   /** The free band down the right edge, in pixels from the top of the window. */
   const portholeTop = $derived(8 + topHeight + 8);
   const portholeRoom = $derived(
     Math.max(0, stageHeight - portholeTop - (8 + bottomHeight + 8)),
   );
+  /** What the card hanging under the window takes, before it opens up. */
+  const CARD_ROOM = 64;
+  /** Room around the solid's extent in the window, for the side lengths. */
+  const LABEL_ROOM = 28;
+  /** The gaps either side of the window: to the solid, and to the edge. */
+  const PORTHOLE_GAPS = 24;
+  /**
+   * How far from its centre the solid reaches on screen, in pixels. The cut in
+   * the window is drawn at the same scale as the solid, so the window has to
+   * hold the solid's whole extent, and the solid has the width beside it. The
+   * solid is fitted as the Solid view fits it, to whichever is tightest: the
+   * width left of the window, the height, or a window as tall as the band.
+   */
+  const sliceReach = $derived.by(() => {
+    const share = 0.78 * fitFraction(lab.mesh.extent, DIMENSION_MAX);
+    const widthFit =
+      (share * (stageWidth - 2 * LABEL_ROOM - PORTHOLE_GAPS)) /
+      (2 * (1 + share));
+    const heightFit = share * stageRoom(stageHeight, chrome);
+    const bandFit = (portholeRoom - CARD_ROOM) / 2 - LABEL_ROOM;
+    return Math.max(24, Math.min(widthFit, heightFit, bandFit));
+  });
+  const portholeDiameter = $derived(2 * (sliceReach + LABEL_ROOM));
+  /** The solid's scale, which the window shares. */
+  const slicePixels = $derived(sliceReach / lab.mesh.extent);
   /**
    * The solid moves left by half of what the window takes, so it sits in the
    * middle of the width left beside it rather than under it.
    */
-  const portholeShift = $derived(
-    portholeWidth > 0 ? (portholeWidth + 24) / 2 : 0,
-  );
+  const portholeShift = $derived((portholeDiameter + PORTHOLE_GAPS) / 2);
 
   // The widths along the bottom edge, for deciding whether the view controls
   // can keep the row with the panels either side of them.
@@ -174,7 +199,10 @@
 <div
   class="relative h-[100dvh] w-full overflow-hidden bg-gradient-to-b from-paper to-accent-soft/50"
   data-ready={ready ? "true" : undefined}
-  use:measureBox={(_width, height) => (stageHeight = height)}
+  use:measureBox={(width, height) => {
+    stageWidth = width;
+    stageHeight = height;
+  }}
 >
   <h1 class="sr-only">{t("app.name")}</h1>
 
@@ -215,19 +243,23 @@
         {lift}
         {chrome}
         shift={portholeShift}
+        pixelsPerUnit={slicePixels}
         onGrid={(step) => (gridStep = step)}
       />
+      <!-- Above the panels along the bottom: the card under the window opens
+           downward to show its working, and may then reach over them. -->
       <div
-        class="pointer-events-none absolute right-2 z-10 flex items-center sm:right-4"
+        class="pointer-events-none absolute right-2 z-30 flex items-center"
         style:top="{portholeTop}px"
         style:height="{portholeRoom}px"
-        use:measureBox={(width) => (portholeWidth = width)}
+        style:padding-bottom="{CARD_ROOM}px"
       >
         <CrossSectionView
           {lab}
           section={lab.section}
+          scale={slicePixels}
+          diameter={portholeDiameter}
           compact={floating}
-          room={portholeRoom}
         />
       </div>
     {:else if lab.view === "cubes" && lab.cubes}

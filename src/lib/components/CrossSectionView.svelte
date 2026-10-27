@@ -1,79 +1,49 @@
 <script lang="ts">
-  import GridKey from "$lib/components/GridKey.svelte";
   import MathText from "$lib/components/MathText.svelte";
   import type { CrossSection, Point2 } from "$lib/domain/crossSections";
-  import { evalExact, formatExact } from "$lib/domain/exact";
+  import { formatExact } from "$lib/domain/exact";
   import { approximateText, formatApproximate } from "$lib/domain/format";
-  import { DIMENSION_MAX } from "$lib/domain/types";
   import { domainText, t, unitLabels } from "$lib/i18n/index.svelte";
-  import {
-    sectionTarget,
-    type LabState,
-    type Target,
-  } from "$lib/state/lab.svelte";
-  import { fitFraction, gridLayers, gridScale } from "$lib/ui/grid";
-  import { measureBox } from "$lib/ui/measureBox";
+  import { sectionTarget, type LabState } from "$lib/state/lab.svelte";
+  import { gridLayers, gridScale } from "$lib/ui/grid";
 
   let {
     lab,
     section,
+    scale,
+    diameter,
     compact = false,
-    room = Infinity,
   }: {
     lab: LabState;
     section: CrossSection;
+    /**
+     * Pixels per unit: the solid view's own, so the cut is drawn exactly as big
+     * as it is on the solid and the grid behind it is ruled at the same step.
+     */
+    scale: number;
+    /** How wide the round window is, in pixels. The lab sizes it to fit. */
+    diameter: number;
     /** Shorten the unit words where the window has no room for them. */
     compact?: boolean;
-    /** The height there is for the window, its key and its card together. */
-    room?: number;
   } = $props();
 
-  /**
-   * How wide the round window is: a share of the screen, held to what the
-   * panels above and below it leave, less what the key and the card stick out
-   * past its rim. It never shrinks below a size the side lengths still fit in.
-   */
-  const diameter = $derived(
-    `min(${compact ? "clamp(7rem,32vmin,13rem)" : "clamp(8.5rem,36vmin,20rem)"}, ${Math.max(96, room - 64)}px)`,
-  );
-
-  // One user unit is one CSS pixel, as in the solid view, so the labels over
-  // the drawing can be placed straight from the geometry. The box is the
-  // round window the drawing is seen through, so it is as tall as it is wide.
-  let boxSize = $state(260);
-  let measured = $state(false);
-  const half = $derived(Math.max(boxSize, 1) / 2);
+  // One user unit is one CSS pixel, so the labels over the drawing can be
+  // placed straight from the geometry. The border is drawn inside the box.
+  const half = $derived(Math.max(diameter, 1) / 2);
 
   /**
-   * The drawing is fitted to the whole solid rather than to the cut, so the
-   * cross section keeps its size relative to the solid: a slice near the tip
-   * of a pyramid comes out small, which is the point. Nothing can be cut out
-   * of a solid wider than the ball around it, so on that fit alone every cross
-   * section would fit; the second bound only ever bites in a window so small
-   * that the side lengths around it would otherwise fall off its rim.
+   * The point of the plane nearest the solid's centre, in the drawing's frame,
+   * which goes in the middle of the window. Every point of the solid lies
+   * within its extent of the centre, so every cross section lies within that
+   * distance of this point: a window that holds the solid's extent at this
+   * scale holds every cut, and the cut keeps its place in it as it moves.
    */
-  const scale = $derived.by(() => {
-    const solid =
-      (half * 0.6 * fitFraction(lab.mesh.extent, DIMENSION_MAX)) /
-      lab.mesh.extent;
-    const reach = Math.max(
-      ...section.outline2d.map(([x, y]) =>
-        Math.hypot(x - middle[0], y - middle[1]),
-      ),
-    );
-    return reach > 0
-      ? Math.min(solid, Math.max(half - 30, half * 0.4) / reach)
-      : solid;
-  });
-
-  /** The middle of the cross section's box, which goes in the middle of ours. */
   const middle = $derived.by<Point2>(() => {
-    const xs = section.outline2d.map(([x]) => x);
-    const ys = section.outline2d.map(([, y]) => y);
-    return [
-      (Math.min(...xs) + Math.max(...xs)) / 2,
-      (Math.min(...ys) + Math.max(...ys)) / 2,
-    ];
+    const [x, y] = section.outline2d[0];
+    const at = section.outline3d[0];
+    const dot = (v: readonly number[]) =>
+      v[0] * at[0] + v[1] * at[1] + v[2] * at[2];
+    return [x - dot(section.plane.across), y - dot(section.plane.up)];
   });
 
   /** A face-on point on screen. The drawing's y axis points up; the screen's down. */
@@ -89,8 +59,9 @@
   );
 
   /**
-   * The grid is ruled from a corner of the cross section, so its squares run
-   * along at least one side and can be counted off it, as on the net.
+   * The grid is ruled at the solid's step, from a corner of the cross section,
+   * so its squares run along at least one side and can be counted off it, and
+   * the key in the corner holds for both drawings.
    */
   const grid = $derived(gridScale(scale));
   const gridInk = $derived(gridLayers(0.45, grid.fade));
@@ -116,16 +87,17 @@
     ];
   });
 
-  /** Which side each symbol in the area formula names, the other way round. */
-  const symbolOf = $derived(
-    Object.fromEntries(
-      Object.entries(section.symbols).map(([symbol, id]) => [id, symbol]),
-    ) as Record<string, string>,
-  );
-
   /** The whole cross section, as one thing to point at. */
   const areaTarget = sectionTarget("area");
-  const areaActive = $derived(lab.isActive(areaTarget));
+  /**
+   * The window holds still whatever is pointed at, here or on the solid; only
+   * pointing at the card, focusing it or pinning it opens up the working.
+   */
+  let cardHovered = $state(false);
+  let cardFocused = $state(false);
+  const working = $derived(
+    cardHovered || cardFocused || lab.isPinned(areaTarget) || lab.showFormulas,
+  );
 
   /** One length per side, set just outside the side's middle. */
   const sides = $derived(
@@ -139,14 +111,10 @@
       return {
         id: edge.id,
         target,
-        active: lab.isActive(target),
         pinned: lab.isPinned(target),
-        symbol: symbolOf[edge.id] ?? null,
         value: formatExact(edge.length),
-        approximate: evalExact(edge.length),
-        line: { x1, y1, x2, y2 },
-        x: half + mid[0] + (away[0] / distance) * 22,
-        y: half + mid[1] + (away[1] / distance) * 18,
+        x: half + mid[0] + (away[0] / distance) * 16,
+        y: half + mid[1] + (away[1] / distance) * 12,
       };
     }),
   );
@@ -173,13 +141,6 @@
     }),
   );
 
-  /** The section target under an event, read straight off the markup. */
-  function targetOf(event: Event): Target | null {
-    const element = event.target as Element | null;
-    return (element?.closest?.("[data-target]")?.getAttribute("data-target") ??
-      null) as Target | null;
-  }
-
   const area = $derived(section.area.approximate);
   /** The exact area as text, or null where it can only be shown rounded. */
   const exactArea = $derived(
@@ -187,7 +148,7 @@
   );
   /** Lines shown now: a curved shape's own all the time, a height with the working. */
   const shownHeights = $derived(
-    heights.filter((height) => height.always || areaActive),
+    heights.filter((height) => height.always || working),
   );
   const name = $derived(domainText(section.name));
 
@@ -206,44 +167,24 @@
 </script>
 
 <!-- A round window beside the solid, rather than half the stage: the cut is
-     held up next to the solid to be looked at face-on. The key to its grid sits
-     on the rim, since the window is ruled at its own scale rather than the
-     solid's; the card naming the cut hangs from the bottom. The whole is
-     exactly as wide as the window, so the lab can make room for it: the card
-     may be wider, and overhangs both sides evenly rather than push the window
-     over as it grows. -->
+     held up next to the solid to be looked at face-on, at the solid's own
+     scale. The card naming the cut hangs from the bottom, out of the flow, so
+     the window never moves as the card opens up its working. -->
 <div
-  class="pointer-events-none flex flex-col items-center"
-  style:width={diameter}
+  class="pointer-events-none relative"
+  style:width="{diameter}px"
+  style:height="{diameter}px"
   data-testid="section-porthole"
 >
-  <div class="relative z-10 -mb-3">
-    <GridKey step={grid.step} unit={lab.unit} />
-  </div>
   <div
-    class="pointer-events-auto relative aspect-square w-full overflow-hidden rounded-full border-4 border-panel bg-paper/90 shadow-xl ring-1 shadow-ink/20 ring-rule/70 backdrop-blur-md"
-    use:measureBox={(width) => {
-      boxSize = width;
-      measured = true;
-    }}
+    class="pointer-events-auto relative h-full w-full overflow-hidden rounded-full bg-paper/90 shadow-xl ring-4 shadow-ink/20 ring-panel backdrop-blur-md"
   >
-    <!-- Pointing at a side or at the cross section measures it, exactly as
-       pointing at an edge or a face of the solid does. The same measurements
-       are reachable without a pointer from the badges over the drawing. -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <svg
       class="h-full w-full select-none"
       viewBox="{-half} {-half} {half * 2} {half * 2}"
       role="img"
       aria-label={description}
       data-testid="section-view"
-      onpointerover={(event) => lab.hover(targetOf(event))}
-      onpointerleave={() => lab.hover(null)}
-      onclick={(event) => {
-        const target = targetOf(event);
-        if (target) lab.togglePin(target);
-      }}
     >
       <defs>
         {#each lattices as lattice (lattice.id)}
@@ -274,75 +215,42 @@
           height={half * 2}
           fill="url(#{lattice.id})"
           opacity={lattice.ink}
-          pointer-events="none"
         />
       {/each}
 
       <polygon
         points={outline}
         fill="#f59e0b"
-        fill-opacity={areaActive ? 1 : 0.85}
+        fill-opacity="0.85"
         stroke="#b45309"
         stroke-width="3"
         stroke-linejoin="round"
-        class="cursor-pointer"
-        data-target={areaTarget}
         data-testid="section-shape"
       />
 
-      {#if shownHeights.length > 0}
-        {#each shownHeights as height (height.id)}
-          <line
-            x1={height.x1}
-            y1={height.y1}
-            x2={height.x2}
-            y2={height.y2}
-            stroke="#7c2d12"
-            stroke-width="2"
-            stroke-dasharray="6 4"
-            pointer-events="none"
-            data-testid="section-height"
-          />
-        {/each}
-      {/if}
-
-      {#each sides as side (side.id)}
-        {#if side.active}
-          <line
-            {...side.line}
-            stroke="#c2410c"
-            stroke-width="6"
-            stroke-linecap="round"
-            pointer-events="none"
-          />
-        {/if}
-        <!-- A fat invisible line is what the pointer actually has to hit. -->
+      {#each shownHeights as height (height.id)}
         <line
-          {...side.line}
-          stroke="transparent"
-          stroke-width="16"
-          stroke-linecap="round"
-          class="cursor-pointer"
-          data-target={side.target}
+          x1={height.x1}
+          y1={height.y1}
+          x2={height.x2}
+          y2={height.y2}
+          stroke="#7c2d12"
+          stroke-width="2"
+          stroke-dasharray="6 4"
+          data-testid="section-height"
         />
       {/each}
     </svg>
 
-    <!-- Lengths and the area are text over the drawing, so they read and
-       translate like the rest of the page. Placed in CSS pixels, so they wait
-       for the measurement. -->
-    <div
-      class="pointer-events-none absolute inset-0 overflow-hidden"
-      class:invisible={!measured}
-    >
+    <!-- Lengths are text over the drawing, so they read and translate like the
+         rest of the page. Each is a badge that measures its side on the solid
+         when pointed at, focused or clicked, so every length is reachable
+         without a pointer; the badge itself never changes. -->
+    <div class="pointer-events-none absolute inset-0 overflow-hidden">
       {#each sides as side (side.id)}
         <button
           type="button"
-          class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-md border px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap shadow-sm {side.active
-            ? 'border-flag bg-flag-soft text-flag'
-            : 'border-transparent bg-panel/85 text-ink hover:border-accent hover:text-accent'} pointer-events-auto"
-          class:ring-2={side.pinned}
-          class:ring-flag={side.pinned}
+          class="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded bg-panel/80 px-1 font-mono text-[11px] leading-4 font-bold whitespace-nowrap text-ink"
           style:left="{side.x}px"
           style:top="{side.y}px"
           data-testid="section-side"
@@ -355,41 +263,32 @@
           onfocus={() => lab.hover(side.target)}
           onblur={() => lab.unhover(side.target)}
           onclick={() => lab.togglePin(side.target)}
-          >{#if side.active && side.symbol}{`${side.symbol} = `}{/if}<MathText
-            text={side.value}
-          />{#if side.active}{` ${linear}`}{#if formatApproximate(side.approximate).rounded}<span
-                class="font-normal text-ink-soft"
-                >{` (${approximateText(side.approximate)})`}</span
-              >{/if}{/if}</button
+          ><MathText text={side.value} /></button
         >
       {/each}
 
-      {#if shownHeights.length > 0}
-        {#each shownHeights as height (height.id)}
-          <span
-            class="absolute -translate-y-1/2 rounded-md border border-[#7c2d12]/40 bg-panel/90 px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap text-[#7c2d12] shadow-sm"
-            style:left="{height.x}px"
-            style:top="{height.y}px"
-            data-testid="section-height-label"
-            >{height.symbol} = <MathText text={height.value} /></span
-          >
-        {/each}
-      {/if}
+      {#each shownHeights as height (height.id)}
+        <span
+          class="absolute -translate-y-1/2 rounded bg-panel/80 px-1 font-mono text-[11px] leading-4 font-bold whitespace-nowrap text-[#7c2d12]"
+          style:left="{height.x}px"
+          style:top="{height.y}px"
+          data-testid="section-height-label"
+          >{height.symbol} = <MathText text={height.value} /></span
+        >
+      {/each}
     </div>
   </div>
 
-  <!-- The card is the cross section's own badge: pointing at it, focusing
-       it or clicking it measures the cross section, opening up its working
-       whatever the fx control says, as pointing at the drawing does. Centred
-       under the window while it fits; wider than that, it hangs out to the
-       left, toward the solid, since the window sits against the right edge:
-       auto margins centre it only while there is room left over to share. -->
-  <div class="relative -mt-5 flex w-full justify-end">
+  <!-- The card is the cross section's own badge: pointing at it, focusing it
+       or clicking it opens up how the area is worked out, under the area, and
+       lights the cut on the solid. Centred under the window while it fits;
+       wider than that, it hangs out to the left, toward the solid, since the
+       window sits against the right edge: auto margins centre it only while
+       there is room left over to share. -->
+  <div class="absolute inset-x-0 top-full -mt-5 flex justify-end">
     <button
       type="button"
-      class="relative mx-auto shrink-0 cursor-pointer rounded-xl border px-3 py-2 text-center shadow-lg shadow-ink/10 backdrop-blur-md {areaActive
-        ? 'border-flag bg-panel/95'
-        : 'border-rule/70 bg-panel/90 hover:border-accent'} pointer-events-auto"
+      class="pointer-events-auto relative mx-auto shrink-0 cursor-pointer rounded-xl border border-rule/70 bg-panel/95 px-3 py-2 text-center shadow-lg shadow-ink/10 backdrop-blur-md"
       class:ring-2={lab.isPinned(areaTarget)}
       class:ring-flag={lab.isPinned(areaTarget)}
       aria-pressed={lab.isPinned(areaTarget)}
@@ -398,10 +297,22 @@
         : ''}"
       data-testid="section-card"
       data-target={areaTarget}
-      onpointerenter={() => lab.hover(areaTarget)}
-      onpointerleave={() => lab.unhover(areaTarget)}
-      onfocus={() => lab.hover(areaTarget)}
-      onblur={() => lab.unhover(areaTarget)}
+      onpointerenter={() => {
+        cardHovered = true;
+        lab.hover(areaTarget);
+      }}
+      onpointerleave={() => {
+        cardHovered = false;
+        lab.unhover(areaTarget);
+      }}
+      onfocus={() => {
+        cardFocused = true;
+        lab.hover(areaTarget);
+      }}
+      onblur={() => {
+        cardFocused = false;
+        lab.unhover(areaTarget);
+      }}
       onclick={() => lab.togglePin(areaTarget)}
     >
       <span class="block text-sm font-bold text-ink" data-testid="section-name">
@@ -409,22 +320,6 @@
             data-testid="section-name-hidden">?</span
           >{/if}
       </span>
-      {#if (areaActive || lab.showFormulas) && section.area.formula}
-        <span
-          class="block font-mono text-xs text-ink-soft"
-          data-testid="section-formula"
-        >
-          <MathText text={section.area.formula} />
-        </span>
-        {#if section.area.substitution}
-          <span
-            class="block font-mono text-xs text-ink-soft"
-            data-testid="section-substitution"
-          >
-            <MathText text={section.area.substitution} />
-          </span>
-        {/if}
-      {/if}
       <span
         class="block font-mono text-base whitespace-nowrap text-ink"
         data-testid="section-area"
@@ -446,6 +341,22 @@
           <span data-testid="section-area-hidden">?</span>
         {/if}
       </span>
+      {#if working && section.area.formula}
+        <span
+          class="mt-1 block border-t border-rule/60 pt-1 font-mono text-xs text-ink-soft"
+          data-testid="section-formula"
+        >
+          <MathText text={section.area.formula} />
+        </span>
+        {#if section.area.substitution}
+          <span
+            class="block font-mono text-xs text-ink-soft"
+            data-testid="section-substitution"
+          >
+            <MathText text={section.area.substitution} />
+          </span>
+        {/if}
+      {/if}
     </button>
   </div>
 </div>
