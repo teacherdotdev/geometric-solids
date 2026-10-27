@@ -263,7 +263,7 @@
           onfocus={() => lab.hover(side.target)}
           onblur={() => lab.unhover(side.target)}
           onclick={() => lab.togglePin(side.target)}
-          ><MathText text={side.value} /></button
+          ><MathText text={side.value} fractions /></button
         >
       {/each}
 
@@ -273,7 +273,7 @@
           style:left="{height.x}px"
           style:top="{height.y}px"
           data-testid="section-height-label"
-          >{height.symbol} = <MathText text={height.value} /></span
+          >{height.symbol} = <MathText text={height.value} fractions /></span
         >
       {/each}
     </div>
@@ -326,7 +326,7 @@
       >
         A
         {#if lab.answersVisible && exactArea}
-          = <strong><MathText text={exactArea} /></strong>
+          = <strong><MathText text={exactArea} fractions /></strong>
           <span class="text-xs text-ink-soft">{areaUnit}</span>
           {#if formatApproximate(area).rounded}
             <span class="block text-xs text-ink-soft"
@@ -346,14 +346,14 @@
           class="mt-1 block border-t border-rule/60 pt-1 font-mono text-xs text-ink-soft"
           data-testid="section-formula"
         >
-          <MathText text={section.area.formula} />
+          <MathText text={section.area.formula} fractions />
         </span>
         {#if section.area.substitution}
           <span
             class="block font-mono text-xs text-ink-soft"
             data-testid="section-substitution"
           >
-            <MathText text={section.area.substitution} />
+            <MathText text={section.area.substitution} fractions />
           </span>
         {/if}
       {/if}

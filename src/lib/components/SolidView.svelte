@@ -1145,10 +1145,14 @@
       >
         {#if label.working}
           <span class="block text-ink-soft"
-            ><MathText text={label.working} /></span
+            ><MathText text={label.working} fractions={!!slicing} /></span
           >
         {/if}
-        <span class="block font-bold"><MathText text={label.text} /></span>
+        <!-- In the slice view a cut can make a length such as 5√35/47, which
+             is set as one number over the other there. -->
+        <span class="block font-bold"
+          ><MathText text={label.text} fractions={!!slicing} /></span
+        >
         {#if label.approximate}
           <span class="block text-ink-soft">{label.approximate}</span>
         {/if}

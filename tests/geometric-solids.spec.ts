@@ -718,6 +718,10 @@ test("slices a pyramid from a trapezoid into a triangle at its tip", async ({
     "(6 + 4)",
   );
   await expect(page.getByTestId("section-area")).toContainText("20/3");
+  // Drawn as one number over the other, while a screen reader still hears 20/3.
+  const fraction = page.getByTestId("section-area").locator(".fraction");
+  await expect(fraction.locator(".fraction-numerator")).toHaveText("20");
+  await expect(fraction.locator(".fraction-denominator")).toHaveText("3");
 });
 
 test("slices a triangular prism into its right triangle", async ({ page }) => {
