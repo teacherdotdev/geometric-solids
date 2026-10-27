@@ -18,6 +18,7 @@ import {
   addExact,
   divideExact,
   evalExact,
+  exactPi,
   exactRational,
   exactSqrt,
   formatExact,
@@ -88,7 +89,12 @@ export type SectionShape =
   | "rightTriangle"
   | "triangle"
   | "pentagon"
-  | "hexagon";
+  | "hexagon"
+  | "circle"
+  | "ellipse"
+  | "partOfEllipse"
+  | "parabolaRegion"
+  | "hyperbolaRegion";
 
 /** English names, translated for display like every other domain string. */
 export const SECTION_NAMES: Record<SectionShape, string> = {
@@ -105,6 +111,11 @@ export const SECTION_NAMES: Record<SectionShape, string> = {
   triangle: "Triangle",
   pentagon: "Pentagon",
   hexagon: "Hexagon",
+  circle: "Circle",
+  ellipse: "Ellipse",
+  partOfEllipse: "Part of an ellipse",
+  parabolaRegion: "Parabola region",
+  hyperbolaRegion: "Hyperbola region",
 };
 
 export type Point2 = readonly [number, number];
@@ -122,8 +133,9 @@ export interface SectionEdge {
 }
 
 /**
- * A length an area formula needs that is not a side: the height of a triangle
- * or trapezoid, drawn in only while the working is shown.
+ * A length that is not a side: the height of a triangle or trapezoid, drawn in
+ * only while the working is shown, or the radius, axes or height of a curved
+ * cross section, which have no sides to carry them and so are always shown.
  */
 export interface SectionLine {
   readonly id: string;
@@ -133,13 +145,20 @@ export interface SectionLine {
   readonly to2d: Point2;
   readonly from3d: Vec3;
   readonly to3d: Vec3;
+  /** Shown all the time, not only while the working is. */
+  readonly always: boolean;
 }
 
 export interface SectionArea {
   /** The general formula, or null for a shape with none at this level. */
   readonly formula: string | null;
   readonly substitution: string | null;
-  readonly exact: Exact;
+  /**
+   * The exact area, or null where it takes mathematics beyond the course —
+   * part of an ellipse, a hyperbola region — and is only ever shown rounded.
+   */
+  readonly exact: Exact | null;
+  readonly approximate: number;
 }
 
 export interface CrossSection {
@@ -342,7 +361,9 @@ export function slicesSolid(kind: SolidKind): boolean {
     kind === "rectangularPrism" ||
     kind === "cube" ||
     kind === "triangularPrism" ||
-    kind === "squarePyramid"
+    kind === "squarePyramid" ||
+    kind === "cylinder" ||
+    kind === "sphere"
   );
 }
 
@@ -386,7 +407,7 @@ export function sliceSpan(
   heading: SliceHeading,
 ): Rational | null {
   const solid = polyhedronOf(kind, d);
-  if (!solid) return null;
+  if (!solid) return roundSpan(kind, d, heading);
   const [low, high] = reach(solid, FRAMES[heading].normal);
   return add(high, mul(low, rational(-1)));
 }
@@ -557,7 +578,7 @@ export function cutSolid(
   slice: Slice,
 ): CrossSection | null {
   const solid = polyhedronOf(kind, d);
-  if (!solid) return null;
+  if (!solid) return cutRound(kind, d, slice);
   const frame = FRAMES[slice.heading];
   const [low, high] = reach(solid, frame.normal);
   if (!insideSpan(slice.position, add(high, mul(low, rational(-1)))))
@@ -655,6 +676,7 @@ export function cutSolid(
       formula: worked.formula,
       substitution: worked.substitution,
       exact: area,
+      approximate: evalExact(area),
     },
     outline2d: corners.map(flat),
     outline3d: corners.map((p) => onSolid(p.at)),
@@ -731,7 +753,7 @@ function working(
         formula: "A = (b₁ + b₂)h / 2",
         substitution: `A = (${formatExact(lengths[first])} + ${formatExact(lengths[second])}) × ${text(height)} / 2`,
         symbols: { "b₁": `e${first}`, "b₂": `e${second}` },
-        lines: [{ ...line, symbol: "h", length: height }],
+        lines: [{ ...line, symbol: "h", length: height, always: false }],
       };
     }
     case "rightTriangle":
@@ -784,7 +806,7 @@ function working(
         formula: "A = bh / 2",
         substitution: `A = ${text(lengths[base])} × ${text(height)} / 2`,
         symbols: { b: `e${base}` },
-        lines: [{ ...line, symbol: "h", length: height }],
+        lines: [{ ...line, symbol: "h", length: height, always: false }],
       };
     }
   }
@@ -802,7 +824,7 @@ function heightLine(
   scale: Rational,
   onSolid: (point: RVec3) => Vec3,
   flat: (p: Corner) => Point2,
-): Omit<SectionLine, "symbol" | "length"> {
+): Omit<SectionLine, "symbol" | "length" | "always"> {
   const p = corners[side];
   const q = corners[(side + 1) % corners.length];
   const top = corners[apex];
@@ -822,5 +844,427 @@ function heightLine(
     to2d: flat(foot),
     from3d: onSolid(top.at),
     to3d: onSolid(foot.at),
+  };
+}
+
+// Round solids --------------------------------------------------------------
+//
+// A cylinder or a sphere cut by one of these planes leaves a circle, an
+// ellipse, a rectangle, or part of an ellipse cut off by a straight edge where
+// the plane runs through a disk. Their corners are not rational, so they are
+// worked out analytically rather than by the polygon cutter above: every
+// length is still exact — a radius, an axis, a chord 2√(r² − d²) — and every
+// area is too, except part of an ellipse, whose area needs an arcsine and is
+// only ever shown rounded.
+//
+// These work in the mesh's own frame, which for a round solid is centred on its
+// axis: the cylinder runs from y = −h/2 to h/2, the sphere is centred on the
+// origin.
+
+type F3 = readonly [number, number, number];
+
+const plus = (a: F3, b: F3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const times = (a: F3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
+const dotF = (a: F3, b: F3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const unitOf = (v: F3): Vec3 => times(v, 1 / Math.hypot(v[0], v[1], v[2]));
+
+/** Bracket a value raised to a power unless it is a plain number. */
+function power(text: string): string {
+  return /^[\d.]+$/.test(text) ? text : `(${text})`;
+}
+
+function roundSpan(
+  kind: SolidKind,
+  d: Dimensions,
+  heading: SliceHeading,
+): Rational | null {
+  if (kind === "sphere") return mul(r(d, "r"), rational(2));
+  if (kind !== "cylinder") return null;
+  const [radius, height] = [r(d, "r"), r(d, "h")];
+  const across = mul(radius, rational(2));
+  if (heading === "level") return height;
+  if (heading === "frontToBack" || heading === "sideToSide") return across;
+  return add(across, height);
+}
+
+interface RoundGeometry {
+  readonly shape: SectionShape;
+  readonly outline: readonly Vec3[];
+  readonly edges: readonly {
+    readonly from: Vec3;
+    readonly to: Vec3;
+    readonly length: Exact;
+  }[];
+  readonly lines: readonly {
+    readonly id: string;
+    readonly symbol: string;
+    readonly from: Vec3;
+    readonly to: Vec3;
+    readonly length: Exact;
+    readonly always: boolean;
+  }[];
+  readonly symbols: Record<string, string>;
+  readonly area: SectionArea;
+  /** The middle of the cross section. */
+  readonly centre: Vec3;
+}
+
+function circleOf(
+  centre: Vec3,
+  radius: Exact,
+  across: Vec3,
+  up: Vec3,
+): RoundGeometry {
+  const size = evalExact(radius);
+  const outline = Array.from({ length: 72 }, (_, i) => {
+    const angle = (i / 72) * Math.PI * 2;
+    return plus(
+      centre,
+      plus(
+        times(across, Math.cos(angle) * size),
+        times(up, Math.sin(angle) * size),
+      ),
+    );
+  });
+  const area = mulExact(radius, radius, exactPi(rational(1)));
+  return {
+    shape: "circle",
+    outline,
+    edges: [],
+    lines: [
+      {
+        id: "radius",
+        symbol: "r",
+        from: centre,
+        to: plus(centre, times(across, size)),
+        length: radius,
+        always: true,
+      },
+    ],
+    symbols: {},
+    area: {
+      formula: "A = πr²",
+      substitution: `A = π × ${power(formatExact(radius))}²`,
+      exact: area,
+      approximate: evalExact(area),
+    },
+    centre,
+  };
+}
+
+function rectangleOf(
+  corners: readonly [Vec3, Vec3, Vec3, Vec3],
+  width: Exact,
+  height: Exact,
+  square: boolean,
+): RoundGeometry {
+  const area = mulExact(width, height);
+  const text = (value: Exact) => factor(formatExact(value));
+  const edges = corners.map((from, i) => ({
+    from,
+    to: corners[(i + 1) % 4],
+    length: i % 2 === 0 ? width : height,
+  }));
+  return {
+    shape: square ? "square" : "rectangle",
+    outline: corners,
+    edges,
+    lines: [],
+    symbols: square ? { s: "e0" } : { l: "e0", w: "e1" },
+    area: {
+      formula: square ? "A = s²" : "A = lw",
+      substitution: square
+        ? `A = ${power(formatExact(width))}²`
+        : `A = ${text(width)} × ${text(height)}`,
+      exact: area,
+      approximate: evalExact(area),
+    },
+    centre: times(plus(corners[0], corners[2]), 0.5),
+  };
+}
+
+/**
+ * A 45° plane through a cylinder. Seen square-on it cuts the side in an
+ * ellipse with semi-axes r across and r√2 uphill; where the plane runs through
+ * a disk, the ellipse is cut off there by a straight chord. `t` runs from −1
+ * to 1 along the ellipse's long axis, and the disks fall at rational `t`.
+ */
+function cylinderDiagonal(
+  radius: Rational,
+  height: Rational,
+  rising: Vec3,
+  side: Vec3,
+  offset: Rational,
+): RoundGeometry {
+  const rr = toNumber(radius);
+  const lift = toNumber(offset);
+  // The axis meets the plane here; the plane climbs along `rising`.
+  const centre: Vec3 = [0, -lift, 0];
+  const uphill = unitOf(plus(rising, [0, 1, 0]));
+  const halfHeight = mul(height, HALF);
+  const clampT = (value: Rational, low: boolean): Rational => {
+    const bound = rational(low ? -1 : 1);
+    return low
+      ? compare(value, bound) < 0
+        ? bound
+        : value
+      : compare(value, bound) > 0
+        ? bound
+        : value;
+  };
+  const tLow = clampT(
+    div(add(offset, mul(halfHeight, rational(-1))), radius),
+    true,
+  );
+  const tHigh = clampT(div(add(offset, halfHeight), radius), false);
+  const at = (t: number, across: number): Vec3 =>
+    plus(
+      centre,
+      plus(times(uphill, t * rr * Math.SQRT2), times(side, across * rr)),
+    );
+  const halfChord = (t: number) => Math.sqrt(Math.max(0, 1 - t * t));
+  const [low, high] = [toNumber(tLow), toNumber(tHigh)];
+  const full = low <= -1 && high >= 1;
+
+  const steps = 36;
+  const right = Array.from({ length: steps + 1 }, (_, i) => {
+    const t = low + ((high - low) * i) / steps;
+    return at(t, halfChord(t));
+  });
+  const left = Array.from({ length: steps + 1 }, (_, i) => {
+    const t = low + ((high - low) * i) / steps;
+    return at(t, -halfChord(t));
+  });
+  const outline = full
+    ? Array.from({ length: 72 }, (_, i) => {
+        const angle = (i / 72) * Math.PI * 2;
+        return at(Math.cos(angle), Math.sin(angle));
+      })
+    : [...right, ...left.reverse()];
+
+  const minor = exactRational(radius);
+  const major = mulExact(exactRational(radius), exactSqrt(rational(2)));
+  if (full) {
+    const area = mulExact(minor, major, exactPi(rational(1)));
+    return {
+      shape: "ellipse",
+      outline,
+      edges: [],
+      lines: [
+        {
+          id: "minor",
+          symbol: "a",
+          from: centre,
+          to: at(0, 1),
+          length: minor,
+          always: true,
+        },
+        {
+          id: "major",
+          symbol: "b",
+          from: centre,
+          to: at(1, 0),
+          length: major,
+          always: true,
+        },
+      ],
+      symbols: {},
+      area: {
+        formula: "A = πab",
+        substitution: `A = π × ${factor(formatExact(minor))} × ${factor(formatExact(major))}`,
+        exact: area,
+        approximate: evalExact(area),
+      },
+      centre,
+    };
+  }
+
+  // A chord where the plane runs through a disk: 2r√(1 − t²).
+  const chord = (t: Rational) =>
+    exactSqrt(
+      mul(
+        mul(rational(4), mul(radius, radius)),
+        add(rational(1), mul(mul(t, t), rational(-1))),
+      ),
+    );
+  const edges = [];
+  if (low > -1)
+    edges.push({
+      from: at(low, -halfChord(low)),
+      to: at(low, halfChord(low)),
+      length: chord(tLow),
+    });
+  if (high < 1)
+    edges.push({
+      from: at(high, halfChord(high)),
+      to: at(high, -halfChord(high)),
+      length: chord(tHigh),
+    });
+  const primitive = (t: number) => t * halfChord(t) + Math.asin(t);
+  const approximate = rr * rr * Math.SQRT2 * (primitive(high) - primitive(low));
+  return {
+    shape: "partOfEllipse",
+    outline,
+    edges,
+    lines: [
+      {
+        id: "height",
+        symbol: "h",
+        from: at(low, 0),
+        to: at(high, 0),
+        // (t_high − t_low) × r√2, rational times √2.
+        length: mulExact(
+          exactRational(mul(add(tHigh, mul(tLow, rational(-1))), radius)),
+          exactSqrt(rational(2)),
+        ),
+        always: true,
+      },
+    ],
+    symbols: {},
+    area: { formula: null, substitution: null, exact: null, approximate },
+    centre: at((low + high) / 2, 0),
+  };
+}
+
+/** The cross section of a round solid, in the mesh's frame. */
+function roundGeometry(
+  kind: SolidKind,
+  d: Dimensions,
+  heading: SliceHeading,
+  position: Rational,
+): RoundGeometry | null {
+  const frame = FRAMES[heading];
+  const across = unitOf(frame.across);
+  const up = unitOf(frame.up);
+  if (kind === "sphere") {
+    // Only level slices: every slice of a sphere is a circle.
+    const radius = r(d, "r");
+    const fromMiddle = add(position, mul(radius, rational(-1)));
+    const size = exactSqrt(
+      add(mul(radius, radius), mul(mul(fromMiddle, fromMiddle), rational(-1))),
+    );
+    const levelUp = unitOf(FRAMES.level.up);
+    const levelAcross = unitOf(FRAMES.level.across);
+    return circleOf([0, toNumber(fromMiddle), 0], size, levelAcross, levelUp);
+  }
+  if (kind !== "cylinder") return null;
+  const [radius, height] = [r(d, "r"), r(d, "h")];
+  const halfHeight = mul(height, HALF);
+  if (heading === "level") {
+    const y = toNumber(add(position, mul(halfHeight, rational(-1))));
+    return circleOf([0, y, 0], exactRational(radius), across, up);
+  }
+  if (heading === "frontToBack" || heading === "sideToSide") {
+    // Distance in from the side, as an offset from the axis.
+    const offset = add(position, mul(radius, rational(-1)));
+    const halfWidthSquared = add(
+      mul(radius, radius),
+      mul(mul(offset, offset), rational(-1)),
+    );
+    const width = exactSqrt(mul(halfWidthSquared, rational(4)));
+    const halfWidth = Math.sqrt(toNumber(halfWidthSquared));
+    const normal = unitOf(frame.normal);
+    const base = times(normal, toNumber(offset));
+    const top = toNumber(halfHeight);
+    const corner = (sideways: number, upward: number) =>
+      plus(base, plus(times(across, sideways), [0, upward, 0]));
+    return rectangleOf(
+      [
+        corner(-halfWidth, -top),
+        corner(halfWidth, -top),
+        corner(halfWidth, top),
+        corner(-halfWidth, top),
+      ],
+      width,
+      exactRational(height),
+      equals(mul(halfWidthSquared, rational(4)), mul(height, height)),
+    );
+  }
+  // A diagonal: the plane is s ∓ y = c along its sliding axis s. Measured from
+  // the side it first touches, the offset from the axis climbs by the
+  // position; turned to rise the same way, every diagonal is the same cut.
+  const slide: Vec3 = [frame.slide[0], frame.slide[1], frame.slide[2]];
+  const risesAlongSlide = frame.normal[1] < 0;
+  const c = add(mul(add(radius, halfHeight), rational(-1)), position);
+  // In the frame that rises along `rising`, the plane is y = s − offset.
+  const rising = risesAlongSlide ? slide : times(slide, -1);
+  const offset = risesAlongSlide ? c : mul(c, rational(-1));
+  // Level and square to `rising`: the ellipse's short axis.
+  const sideways: Vec3 = [-rising[2], 0, rising[0]];
+  return cylinderDiagonal(radius, height, rising, sideways, offset);
+}
+
+/** Where a round solid first meets a plane moving along its normal. */
+function roundTouch(kind: SolidKind, d: Dimensions, normal: F3): Vec3 {
+  const radius = toNumber(r(d, "r"));
+  if (kind === "sphere") return times(unitOf(normal), -radius);
+  const flat: F3 = [normal[0], 0, normal[2]];
+  const sideways =
+    flat[0] === 0 && flat[2] === 0 ? [0, 0, 0] : times(unitOf(flat), -radius);
+  const top = toNumber(r(d, "h")) / 2;
+  const y = normal[1] > 0 ? -top : normal[1] < 0 ? top : 0;
+  return [sideways[0], y, sideways[2]];
+}
+
+function cutRound(
+  kind: SolidKind,
+  d: Dimensions,
+  slice: Slice,
+): CrossSection | null {
+  const heading = kind === "sphere" ? "level" : slice.heading;
+  const span = roundSpan(kind, d, heading);
+  if (!span || !insideSpan(slice.position, span)) return null;
+  const geometry = roundGeometry(kind, d, heading, slice.position);
+  if (!geometry) return null;
+  const frame = FRAMES[heading];
+  const across = unitOf(frame.across);
+  const up = unitOf(frame.up);
+  const flat = (point: Vec3): Point2 => [dotF(point, across), dotF(point, up)];
+
+  const touch = roundTouch(kind, d, frame.normal);
+  const bottom =
+    kind === "sphere" ? -toNumber(r(d, "r")) : -toNumber(r(d, "h")) / 2;
+  const centre = geometry.centre;
+  const flatUp: IVec3 = [frame.up[0], 0, frame.up[2]];
+  const level = flatUp[0] === 0 && flatUp[2] === 0;
+  return {
+    shape: geometry.shape,
+    name: SECTION_NAMES[geometry.shape],
+    edges: geometry.edges.map((edge, i) => ({
+      id: `e${i}`,
+      length: edge.length,
+      from2d: flat(edge.from),
+      to2d: flat(edge.to),
+      from3d: edge.from,
+      to3d: edge.to,
+    })),
+    symbols: geometry.symbols,
+    lines: geometry.lines.map((line) => ({
+      id: line.id,
+      symbol: line.symbol,
+      length: line.length,
+      from2d: flat(line.from),
+      to2d: flat(line.to),
+      from3d: line.from,
+      to3d: line.to,
+      always: line.always,
+    })),
+    area: geometry.area,
+    outline2d: geometry.outline.map(flat),
+    outline3d: geometry.outline,
+    plane: { origin: centre, across, up },
+    travel: {
+      from3d: touch,
+      to3d: plus(touch, times(frame.slide, toNumber(slice.position))),
+    },
+    angle:
+      heading === "level"
+        ? null
+        : {
+            at: plus(centre, times(frame.up, -(centre[1] - bottom))),
+            floor: unitOf(level ? frame.normal : flatUp),
+            rise: up,
+            degrees: level ? 90 : 45,
+          },
   };
 }

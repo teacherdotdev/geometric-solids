@@ -53,18 +53,22 @@
     front: () => t("slice.heading.front"),
   };
   const turns = $derived(SLICE_HEADINGS[lab.sliceDirection].length > 1);
+  /** Every slice of a sphere is a circle: it has nowhere to turn. */
+  const round = $derived(lab.kind === "sphere");
 
   const choice =
     "cursor-pointer rounded-lg px-2 py-1 text-xs font-bold transition";
 
   const label = $derived(
-    lab.sliceDirection === "diagonal"
-      ? t("slice.position.diagonal")
-      : lab.sliceHeading === "frontToBack"
-        ? t("slice.position.frontToBack")
-        : lab.sliceHeading === "sideToSide"
-          ? t("slice.position.sideToSide")
-          : t("slice.position.level"),
+    round
+      ? t("slice.position.sphere")
+      : lab.sliceDirection === "diagonal"
+        ? t("slice.position.diagonal")
+        : lab.sliceHeading === "frontToBack"
+          ? t("slice.position.frontToBack")
+          : lab.sliceHeading === "sideToSide"
+            ? t("slice.position.sideToSide")
+            : t("slice.position.level"),
   );
 </script>
 
@@ -74,60 +78,62 @@
   aria-label={t("slice.label")}
   data-testid="slice-controls"
 >
-  <div class="flex flex-wrap items-center justify-center gap-1">
-    <div class="flex" role="radiogroup" aria-label={t("slice.direction")}>
+  {#if !round}
+    <div class="flex flex-wrap items-center justify-center gap-1">
+      <div class="flex" role="radiogroup" aria-label={t("slice.direction")}>
+        {#each SLICE_DIRECTIONS as direction (direction)}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lab.sliceDirection === direction}
+            aria-describedby="slice-hint-{direction}"
+            title={directionHints[direction]()}
+            data-testid="slice-{direction}"
+            class="{choice} {lab.sliceDirection === direction
+              ? 'bg-accent text-white'
+              : 'text-ink-soft hover:text-accent'}"
+            onclick={() => lab.setSliceDirection(direction)}
+            >{directionNames[direction]()}</button
+          >
+        {/each}
+      </div>
       {#each SLICE_DIRECTIONS as direction (direction)}
-        <button
-          type="button"
-          role="radio"
-          aria-checked={lab.sliceDirection === direction}
-          aria-describedby="slice-hint-{direction}"
-          title={directionHints[direction]()}
-          data-testid="slice-{direction}"
-          class="{choice} {lab.sliceDirection === direction
-            ? 'bg-accent text-white'
-            : 'text-ink-soft hover:text-accent'}"
-          onclick={() => lab.setSliceDirection(direction)}
-          >{directionNames[direction]()}</button
+        <span id="slice-hint-{direction}" class="sr-only"
+          >{directionHints[direction]()}</span
         >
       {/each}
+      {#if turns}
+        <button
+          type="button"
+          class="{choice} flex items-center gap-1 border border-rule text-ink-soft hover:border-accent hover:text-accent"
+          data-testid="slice-turn"
+          aria-label={t("slice.turn", {
+            heading: headingNames[lab.sliceHeading](),
+          })}
+          title={t("slice.turn", { heading: headingNames[lab.sliceHeading]() })}
+          onclick={() => lab.turnSlice()}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+            <path d="M20 4v5h-5" />
+          </svg>
+          <span data-testid="slice-heading"
+            >{headingNames[lab.sliceHeading]()}</span
+          >
+        </button>
+      {/if}
     </div>
-    {#each SLICE_DIRECTIONS as direction (direction)}
-      <span id="slice-hint-{direction}" class="sr-only"
-        >{directionHints[direction]()}</span
-      >
-    {/each}
-    {#if turns}
-      <button
-        type="button"
-        class="{choice} flex items-center gap-1 border border-rule text-ink-soft hover:border-accent hover:text-accent"
-        data-testid="slice-turn"
-        aria-label={t("slice.turn", {
-          heading: headingNames[lab.sliceHeading](),
-        })}
-        title={t("slice.turn", { heading: headingNames[lab.sliceHeading]() })}
-        onclick={() => lab.turnSlice()}
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M20 12a8 8 0 1 1-2.34-5.66" />
-          <path d="M20 4v5h-5" />
-        </svg>
-        <span data-testid="slice-heading"
-          >{headingNames[lab.sliceHeading]()}</span
-        >
-      </button>
-    {/if}
-  </div>
+  {/if}
   <p class="text-xs font-bold text-ink-soft">{label}</p>
   <div class="flex items-center gap-1.5">
     <NumberField

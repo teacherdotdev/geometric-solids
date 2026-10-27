@@ -607,6 +607,51 @@ test("slices a triangular prism into its right triangle", async ({ page }) => {
   await expect(page.getByTestId("section-area")).toContainText("6");
 });
 
+test("slices a sphere into circles, with nowhere to turn", async ({ page }) => {
+  await page.getByTestId("shape-sphere").click();
+  await page.getByTestId("view-slice").click();
+
+  // Every slice of a sphere is a circle, so there is only how high.
+  await expect(page.getByTestId("slice-horizontal")).toHaveCount(0);
+  await expect(page.getByTestId("slice-turn")).toHaveCount(0);
+  await expect(page.getByTestId("slice-controls")).toContainText(
+    "Height above the lowest point",
+  );
+
+  await page.getByTestId("input-slice-position").fill("1");
+  await expect(page.getByTestId("section-name")).toHaveText("Circle");
+  await expect(page.getByTestId("section-height-label")).toContainText("r =");
+  await expect(page.getByTestId("section-area")).toContainText("5π");
+});
+
+test("slices a cylinder into an ellipse, or part of one with a rounded area", async ({
+  page,
+}) => {
+  await page.getByTestId("shape-cylinder").click();
+  await page.getByTestId("input-r").fill("1");
+  await page.getByTestId("input-h").fill("4");
+  await page.getByTestId("view-slice").click();
+  await expect(page.getByTestId("section-name")).toHaveText("Circle");
+
+  await page.getByTestId("slice-diagonal").click();
+  await page.getByTestId("input-slice-position").fill("3");
+  await expect(page.getByTestId("section-name")).toHaveText("Ellipse");
+  await expect(page.getByTestId("section-area")).toContainText("√2π");
+  await expect(page.getByTestId("section-beyond-course")).toHaveCount(0);
+
+  // A squat cylinder: the cut runs through both disks.
+  await page.getByTestId("input-h").fill("1");
+  await page.getByTestId("input-slice-position").fill("1.5");
+  await expect(page.getByTestId("section-name")).toHaveText(
+    "Part of an ellipse",
+  );
+  await expect(page.getByTestId("section-area")).toContainText("≈");
+  await expect(page.getByTestId("section-beyond-course")).toBeVisible();
+  // No formula to show, even when asked for the working.
+  await page.getByTestId("section-card").hover();
+  await expect(page.getByTestId("section-formula")).toHaveCount(0);
+});
+
 test("measures the cross section from the keyboard alone", async ({ page }) => {
   await page.getByTestId("view-slice").click();
 

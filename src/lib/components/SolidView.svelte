@@ -340,7 +340,7 @@
       heights: section.lines.map((line) => {
         const [x1, y1] = at(line.from3d);
         const [x2, y2] = at(line.to3d);
-        return { id: line.id, x1, y1, x2, y2 };
+        return { id: line.id, always: line.always, x1, y1, x2, y2 };
       }),
 
       angle,
@@ -789,8 +789,8 @@
         stroke-linejoin="round"
         pointer-events="none"
       />
-      {#if lab.isActive(sectionTarget("area"))}
-        {#each slicing.heights as height (height.id)}
+      {#each slicing.heights as height (height.id)}
+        {#if height.always || lab.isActive(sectionTarget("area"))}
           <line
             x1={height.x1}
             y1={height.y1}
@@ -801,8 +801,8 @@
             stroke-dasharray="6 4"
             pointer-events="none"
           />
-        {/each}
-      {/if}
+        {/if}
+      {/each}
       {#each slicing.sides as side (side.id)}
         {#if lab.isActive(side.target)}
           <line

@@ -57,7 +57,7 @@ describe("horizontal slices of a rectangular prism and a cube", () => {
         "4",
         "4",
       ]);
-      expect(formatExact(section.area.exact)).toBe("12");
+      expect(formatExact(section.area.exact!)).toBe("12");
     }
   });
 
@@ -66,7 +66,7 @@ describe("horizontal slices of a rectangular prism and a cube", () => {
     expect(section.name).toBe("Square");
     expect(section.area.formula).toBe("A = s²");
     expect(section.area.substitution).toBe("A = 2²");
-    expect(formatExact(section.area.exact)).toBe("4");
+    expect(formatExact(section.area.exact!)).toBe("4");
   });
 
   it("show the working for a rectangle", () => {
@@ -156,7 +156,7 @@ describe("every cross section", () => {
     for (const [kind, d] of solids) {
       for (const slice of slices(kind, d)) {
         const section = cut(kind, d, slice);
-        const area = evalExact(section.area.exact);
+        const area = evalExact(section.area.exact!);
         expect(area).toBeGreaterThan(0);
         expect(area).toBeCloseTo(enclosed(section.outline2d), 9);
       }
@@ -194,8 +194,8 @@ describe("every cross section", () => {
           ...slice,
           position: fromTenths(toNumber(slice.position) * 2),
         });
-        expect(evalExact(large.area.exact)).toBeCloseTo(
-          evalExact(small.area.exact) * 4,
+        expect(evalExact(large.area.exact!)).toBeCloseTo(
+          evalExact(small.area.exact!) * 4,
           9,
         );
         expect(large.edges.map((edge) => evalExact(edge.length))).toEqual(
@@ -226,7 +226,7 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
       "2√2",
       "2√2",
     ]);
-    expect(formatExact(section.area.exact)).toBe("4√2");
+    expect(formatExact(section.area.exact!)).toBe("4√2");
     expect(section.area.substitution).toBe("A = 2 × 2√2");
   });
 
@@ -350,7 +350,7 @@ describe("slices of a square pyramid", () => {
   it("give a square half as wide half way up", () => {
     const section = cut("squarePyramid", PYRAMID, horizontal(2));
     expect(section.name).toBe("Square");
-    expect(formatExact(section.area.exact)).toBe("9");
+    expect(formatExact(section.area.exact!)).toBe("9");
   });
 
   it("shrink by b(1 − y/h) as they rise", () => {
@@ -368,7 +368,7 @@ describe("slices of a square pyramid", () => {
     expect(
       lengths("squarePyramid", PYRAMID, sliceOf("frontToBack", 3)),
     ).toEqual(["5", "5", "6"]);
-    expect(formatExact(tip.area.exact)).toBe("12");
+    expect(formatExact(tip.area.exact!)).toBe("12");
     expect(tip.area.substitution).toBe("A = 6 × 4 / 2");
 
     const off = cut("squarePyramid", PYRAMID, sliceOf("frontToBack", 1));
@@ -376,7 +376,7 @@ describe("slices of a square pyramid", () => {
     expect(
       lengths("squarePyramid", PYRAMID, sliceOf("frontToBack", 1)),
     ).toEqual(["4", "5/3", "5/3", "6"]);
-    expect(formatExact(off.area.exact)).toBe("20/3");
+    expect(formatExact(off.area.exact!)).toBe("20/3");
     expect(off.area.formula).toBe("A = (b₁ + b₂)h / 2");
     expect(formatExact(off.lines[0].length)).toBe("4/3");
   });
@@ -415,7 +415,7 @@ describe("slices of a right-triangular prism", () => {
       "5",
       "5",
     ]);
-    expect(formatExact(section.area.exact)).toBe("7.5");
+    expect(formatExact(section.area.exact!)).toBe("7.5");
   });
 
   it("give the right triangle a, b, c across its length", () => {
@@ -429,7 +429,7 @@ describe("slices of a right-triangular prism", () => {
       expect(
         lengths("triangularPrism", PRISM3, sliceOf("sideToSide", position)),
       ).toEqual(["3", "4", "5"]);
-      expect(formatExact(section.area.exact)).toBe("6");
+      expect(formatExact(section.area.exact!)).toBe("6");
     }
   });
 
@@ -458,5 +458,107 @@ describe("slices of a right-triangular prism", () => {
     expect(cut("triangularPrism", PRISM3, sliceOf("front", 3)).name).toBe(
       "Right triangle",
     );
+  });
+});
+
+describe("slices of a cylinder", () => {
+  it("give a circle equal to the bottom face at every height", () => {
+    for (const height of [0.1, 1.5, 2.9]) {
+      const section = cut("cylinder", { r: 2, h: 3 }, horizontal(height));
+      expect(section.name).toBe("Circle");
+      expect(formatExact(section.area.exact!)).toBe("4π");
+      expect(section.lines.map((line) => formatExact(line.length))).toEqual([
+        "2",
+      ]);
+    }
+  });
+
+  it("give a rectangle 2√(r² − d²) wide standing up", () => {
+    const middle = cut("cylinder", { r: 2, h: 3 }, sliceOf("frontToBack", 2));
+    expect(middle.name).toBe("Rectangle");
+    expect(
+      lengths("cylinder", { r: 2, h: 3 }, sliceOf("frontToBack", 2)),
+    ).toEqual(["3", "3", "4", "4"]);
+    expect(formatExact(middle.area.exact!)).toBe("12");
+    // 1 in from the side, 1 from the axis: 2√(4 − 1) = 2√3 wide.
+    expect(
+      lengths("cylinder", { r: 2, h: 3 }, sliceOf("sideToSide", 1)),
+    ).toEqual(["2√3", "2√3", "3", "3"]);
+    // Through the axis of a cylinder as tall as it is wide: a square.
+    expect(
+      cut("cylinder", { r: 2, h: 4 }, sliceOf("frontToBack", 2)).name,
+    ).toBe("Square");
+  });
+
+  it("give an ellipse with axes 2r and 2√2·r while the cut misses both disks", () => {
+    const section = cut("cylinder", { r: 1, h: 4 }, sliceOf("right", 3));
+    expect(section.name).toBe("Ellipse");
+    expect(formatExact(section.area.exact!)).toBe("√2π");
+    expect(section.area.formula).toBe("A = πab");
+    expect(section.lines.map((line) => formatExact(line.length))).toEqual([
+      "1",
+      "√2",
+    ]);
+  });
+
+  it("give part of an ellipse, with a rounded area only, once it cuts a disk", () => {
+    const section = cut("cylinder", { r: 2, h: 3 }, sliceOf("right", 3.5));
+    expect(section.name).toBe("Part of an ellipse");
+    expect(section.area.exact).toBeNull();
+    expect(section.area.formula).toBeNull();
+    // Cut off by both disks, 3/4 of the way out from the middle each way.
+    expect(lengths("cylinder", { r: 2, h: 3 }, sliceOf("right", 3.5))).toEqual([
+      "√7",
+      "√7",
+    ]);
+    expect(section.area.approximate).toBeCloseTo(
+      enclosed(section.outline2d),
+      2,
+    );
+  });
+
+  it("give the same cross section on every diagonal", () => {
+    const areas = (["right", "back", "left", "front"] as const).map(
+      (heading) =>
+        cut("cylinder", { r: 2, h: 3 }, sliceOf(heading, 2.5)).area.approximate,
+    );
+    for (const area of areas) expect(area).toBeCloseTo(areas[0], 9);
+  });
+
+  it("has an area close to what its drawn outline encloses", () => {
+    for (const heading of ["level", "frontToBack", "right", "front"] as const) {
+      const span = toNumber(sliceSpan("cylinder", { r: 2, h: 3 }, heading)!);
+      for (let tenths = 1; tenths < span * 10; tenths += 3) {
+        const section = cut(
+          "cylinder",
+          { r: 2, h: 3 },
+          sliceOf(heading, tenths / 10),
+        );
+        expect(section.area.approximate).toBeGreaterThan(0);
+        expect(
+          section.area.approximate / enclosed(section.outline2d),
+        ).toBeCloseTo(1, 1);
+      }
+    }
+  });
+});
+
+describe("slices of a sphere", () => {
+  it("are always circles, of radius √(r² − d²)", () => {
+    const section = cut("sphere", { r: 3 }, horizontal(1));
+    expect(section.name).toBe("Circle");
+    expect(formatExact(section.lines[0].length)).toBe("√5");
+    expect(formatExact(section.area.exact!)).toBe("5π");
+    expect(section.area.substitution).toBe("A = π × (√5)²");
+    // Through the middle: a great circle, as wide as the sphere.
+    expect(
+      formatExact(cut("sphere", { r: 3 }, horizontal(3)).area.exact!),
+    ).toBe("9π");
+  });
+
+  it("run from its lowest point to its highest, whatever way the slice faced", () => {
+    expect(toNumber(sliceSpan("sphere", { r: 3 }, "right")!)).toBe(6);
+    expect(cut("sphere", { r: 3 }, sliceOf("right", 1)).name).toBe("Circle");
+    expect(cutSolid("sphere", { r: 3 }, horizontal(6))).toBeNull();
   });
 });

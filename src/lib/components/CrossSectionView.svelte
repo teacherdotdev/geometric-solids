@@ -176,13 +176,26 @@
       40,
   );
 
-  const area = $derived(evalExact(section.area.exact));
+  const area = $derived(section.area.approximate);
+  /** The exact area as text, or null where it can only be shown rounded. */
+  const exactArea = $derived(
+    section.area.exact ? formatExact(section.area.exact) : null,
+  );
+  /** Lines shown now: a curved shape's own all the time, a height with the working. */
+  const shownHeights = $derived(
+    heights.filter((height) => height.always || areaActive),
+  );
   const name = $derived(domainText(section.name));
 
   const description = $derived(
     t("slice.drawing", {
       name: lab.answersVisible ? name : t("slice.hiddenName"),
-      sides: sides.map((side) => side.value).join(", "),
+      sides: [
+        ...sides.map((side) => side.value),
+        ...heights
+          .filter((height) => height.always)
+          .map((height) => `${height.symbol} = ${height.value}`),
+      ].join(", "),
       unit: linear,
     }),
   );
@@ -259,8 +272,8 @@
       data-testid="section-shape"
     />
 
-    {#if areaActive}
-      {#each heights as height (height.id)}
+    {#if shownHeights.length > 0}
+      {#each shownHeights as height (height.id)}
         <line
           x1={height.x1}
           y1={height.y1}
@@ -333,8 +346,8 @@
       >
     {/each}
 
-    {#if areaActive}
-      {#each heights as height (height.id)}
+    {#if shownHeights.length > 0}
+      {#each shownHeights as height (height.id)}
         <span
           class="absolute -translate-y-1/2 rounded-md border border-[#7c2d12]/40 bg-panel/90 px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap text-[#7c2d12] shadow-sm"
           style:left="{height.x}px"
@@ -359,7 +372,7 @@
       style:top="{cardTop}px"
       aria-pressed={lab.isPinned(areaTarget)}
       aria-label="{t('slice.area')}{lab.answersVisible
-        ? `: ${name}, ${formatExact(section.area.exact)} ${areaUnit}`
+        ? `: ${name}, ${exactArea ?? approximateText(area)} ${areaUnit}`
         : ''}"
       data-testid="section-card"
       data-target={areaTarget}
@@ -394,19 +407,31 @@
         class="block font-mono text-base whitespace-nowrap text-ink"
         data-testid="section-area"
       >
-        A =
-        {#if lab.answersVisible}
-          <strong><MathText text={formatExact(section.area.exact)} /></strong>
+        A
+        {#if lab.answersVisible && exactArea}
+          = <strong><MathText text={exactArea} /></strong>
           <span class="text-xs text-ink-soft">{areaUnit}</span>
           {#if formatApproximate(area).rounded}
             <span class="block text-xs text-ink-soft"
               >{approximateText(area)} {areaUnit}</span
             >
           {/if}
+        {:else if lab.answersVisible}
+          <strong>{approximateText(area)}</strong>
+          <span class="text-xs text-ink-soft">{areaUnit}</span>
         {:else}
+          =
           <span data-testid="section-area-hidden">?</span>
         {/if}
       </span>
+      {#if !section.area.exact}
+        <!-- Part of an ellipse or a hyperbola region: an honest rounded
+             area, and why there is no exact one. -->
+        <span
+          class="mt-1 block max-w-[15rem] text-xs leading-snug font-normal whitespace-normal text-ink-soft"
+          data-testid="section-beyond-course">{t("slice.beyondCourse")}</span
+        >
+      {/if}
     </button>
   </div>
 </div>
