@@ -338,7 +338,12 @@ function polyhedronOf(kind: SolidKind, d: Dimensions): Polyhedron | null {
 
 /** The solids a slice can be taken through. */
 export function slicesSolid(kind: SolidKind): boolean {
-  return kind === "rectangularPrism" || kind === "cube";
+  return (
+    kind === "rectangularPrism" ||
+    kind === "cube" ||
+    kind === "triangularPrism" ||
+    kind === "squarePyramid"
+  );
 }
 
 function dotI(n: IVec3, v: RVec3): Rational {

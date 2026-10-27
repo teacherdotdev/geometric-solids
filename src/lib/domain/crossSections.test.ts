@@ -343,3 +343,120 @@ describe("the working for a cross section's area", () => {
     }
   });
 });
+
+describe("slices of a square pyramid", () => {
+  const PYRAMID = { b: 6, h: 4 };
+
+  it("give a square half as wide half way up", () => {
+    const section = cut("squarePyramid", PYRAMID, horizontal(2));
+    expect(section.name).toBe("Square");
+    expect(formatExact(section.area.exact)).toBe("9");
+  });
+
+  it("shrink by b(1 − y/h) as they rise", () => {
+    for (const height of [0.5, 1, 2.5, 3.9]) {
+      const section = cut("squarePyramid", PYRAMID, horizontal(height));
+      const side = 6 * (1 - height / 4);
+      for (const edge of section.edges)
+        expect(evalExact(edge.length)).toBeCloseTo(side, 9);
+    }
+  });
+
+  it("give an isosceles triangle through the tip, and a trapezoid off it", () => {
+    const tip = cut("squarePyramid", PYRAMID, sliceOf("frontToBack", 3));
+    expect(tip.name).toBe("Isosceles triangle");
+    expect(
+      lengths("squarePyramid", PYRAMID, sliceOf("frontToBack", 3)),
+    ).toEqual(["5", "5", "6"]);
+    expect(formatExact(tip.area.exact)).toBe("12");
+    expect(tip.area.substitution).toBe("A = 6 × 4 / 2");
+
+    const off = cut("squarePyramid", PYRAMID, sliceOf("frontToBack", 1));
+    expect(off.name).toBe("Trapezoid");
+    expect(
+      lengths("squarePyramid", PYRAMID, sliceOf("frontToBack", 1)),
+    ).toEqual(["4", "5/3", "5/3", "6"]);
+    expect(formatExact(off.area.exact)).toBe("20/3");
+    expect(off.area.formula).toBe("A = (b₁ + b₂)h / 2");
+    expect(formatExact(off.lines[0].length)).toBe("4/3");
+  });
+
+  it("give a trapezoid on every diagonal", () => {
+    for (const heading of ["right", "back", "left", "front"] as const) {
+      const span = toNumber(sliceSpan("squarePyramid", PYRAMID, heading)!);
+      for (let tenths = 1; tenths < span * 10; tenths += 7) {
+        expect(
+          cut("squarePyramid", PYRAMID, sliceOf(heading, tenths / 10)).name,
+        ).toBe("Trapezoid");
+      }
+    }
+  });
+
+  it("never call a triangle equilateral unless it exactly is", () => {
+    // h = 5.2 is as near as tenths get to b√3/2 for b = 6, and it is not there.
+    const near = cut(
+      "squarePyramid",
+      { b: 6, h: 5.2 },
+      sliceOf("sideToSide", 3),
+    );
+    expect(near.name).toBe("Isosceles triangle");
+  });
+});
+
+describe("slices of a right-triangular prism", () => {
+  const PRISM3 = { a: 3, b: 4, p: 5 };
+
+  it("stand it on its leg-a rectangle, so a horizontal slice is a rectangle", () => {
+    const section = cut("triangularPrism", PRISM3, horizontal(2));
+    expect(section.name).toBe("Rectangle");
+    expect(lengths("triangularPrism", PRISM3, horizontal(2))).toEqual([
+      "1.5",
+      "1.5",
+      "5",
+      "5",
+    ]);
+    expect(formatExact(section.area.exact)).toBe("7.5");
+  });
+
+  it("give the right triangle a, b, c across its length", () => {
+    for (const position of [0.5, 2.5, 4.5]) {
+      const section = cut(
+        "triangularPrism",
+        PRISM3,
+        sliceOf("sideToSide", position),
+      );
+      expect(section.name).toBe("Right triangle");
+      expect(
+        lengths("triangularPrism", PRISM3, sliceOf("sideToSide", position)),
+      ).toEqual(["3", "4", "5"]);
+      expect(formatExact(section.area.exact)).toBe("6");
+    }
+  });
+
+  it("give a rectangle along its length", () => {
+    expect(cut("triangularPrism", PRISM3, sliceOf("frontToBack", 1)).name).toBe(
+      "Rectangle",
+    );
+  });
+
+  it("name a right triangle with equal legs as both", () => {
+    const section = cut(
+      "triangularPrism",
+      { a: 4, b: 4, p: 5 },
+      sliceOf("sideToSide", 2),
+    );
+    expect(section.name).toBe("Right isosceles triangle");
+  });
+
+  it("lean into a rectangle one way and a trapezoid or triangle the other", () => {
+    expect(cut("triangularPrism", PRISM3, sliceOf("right", 3)).name).toBe(
+      "Rectangle",
+    );
+    expect(cut("triangularPrism", PRISM3, sliceOf("front", 7)).name).toBe(
+      "Trapezoid",
+    );
+    expect(cut("triangularPrism", PRISM3, sliceOf("front", 3)).name).toBe(
+      "Right triangle",
+    );
+  });
+});

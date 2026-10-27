@@ -556,6 +556,57 @@ test("measures the cross section's sides and area, on both drawings", async ({
   await expect(page.getByTestId("section-area")).toContainText("12");
 });
 
+test("slices a pyramid from a trapezoid into a triangle at its tip", async ({
+  page,
+}) => {
+  await page.getByTestId("shape-squarePyramid").click();
+  await page.getByTestId("view-slice").click();
+
+  // Half way up a pyramid with base 6 and height 4: a square half as wide.
+  await page.getByTestId("input-slice-position").fill("2");
+  await expect(page.getByTestId("section-name")).toHaveText("Square");
+  expect(await sectionSides(page)).toEqual(["3", "3", "3", "3"]);
+  await expect(page.getByTestId("section-area")).toContainText("9");
+
+  // Straight down through the tip: an isosceles triangle 6, 5, 5.
+  await page.getByTestId("slice-vertical").click();
+  await page.getByTestId("input-slice-position").fill("3");
+  await expect(page.getByTestId("section-name")).toHaveText(
+    "Isosceles triangle",
+  );
+  expect(await sectionSides(page)).toEqual(["5", "5", "6"]);
+  await expect(page.getByTestId("section-area")).toContainText("12");
+
+  // Off the tip: a trapezoid, whose height is not a side, so it is drawn in
+  // while the working is shown.
+  await page.getByTestId("input-slice-position").fill("1");
+  await expect(page.getByTestId("section-name")).toHaveText("Trapezoid");
+  expect(await sectionSides(page)).toEqual(["4", "5/3", "5/3", "6"]);
+  await expect(page.getByTestId("section-height")).toHaveCount(0);
+  await page.getByTestId("section-card").hover();
+  await expect(page.getByTestId("section-height")).toHaveCount(1);
+  await expect(page.getByTestId("section-height-label")).toContainText("h =");
+  await expect(page.getByTestId("section-substitution")).toContainText(
+    "(6 + 4)",
+  );
+  await expect(page.getByTestId("section-area")).toContainText("20/3");
+});
+
+test("slices a triangular prism into its right triangle", async ({ page }) => {
+  await page.getByTestId("shape-triangularPrism").click();
+  await page.getByTestId("view-slice").click();
+  // It stands on a rectangle, so a horizontal slice is one.
+  await page.getByTestId("input-slice-position").fill("2");
+  await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
+  expect(await sectionSides(page)).toEqual(["1.5", "1.5", "5", "5"]);
+
+  await page.getByTestId("slice-vertical").click();
+  await page.getByTestId("slice-turn").click();
+  await expect(page.getByTestId("section-name")).toHaveText("Right triangle");
+  expect(await sectionSides(page)).toEqual(["3", "4", "5"]);
+  await expect(page.getByTestId("section-area")).toContainText("6");
+});
+
 test("measures the cross section from the keyboard alone", async ({ page }) => {
   await page.getByTestId("view-slice").click();
 
