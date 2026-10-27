@@ -56,8 +56,6 @@ const en = {
     "slice.heading.back": "rising to the back",
     "slice.heading.left": "rising to the left",
     "slice.heading.front": "rising to the front",
-    "slice.beyondCourse":
-      "Its exact area takes mathematics beyond this course, so it is shown rounded.",
     "slice.position.sphere": "Height above the lowest point",
     "slice.position.level": "Height above the bottom face",
     "slice.position.frontToBack": "Distance in from the left side",
@@ -256,8 +254,6 @@ const es = {
     "slice.heading.back": "subiendo hacia atrás",
     "slice.heading.left": "subiendo hacia la izquierda",
     "slice.heading.front": "subiendo hacia adelante",
-    "slice.beyondCourse":
-      "Su área exacta requiere matemáticas más allá de este curso, así que se muestra redondeada.",
     "slice.position.sphere": "Altura sobre el punto más bajo",
     "slice.position.level": "Altura sobre la cara inferior",
     "slice.position.frontToBack": "Distancia desde el lado izquierdo",
@@ -551,8 +547,6 @@ const fr = {
     "slice.heading.back": "montant vers l’arrière",
     "slice.heading.left": "montant vers la gauche",
     "slice.heading.front": "montant vers l’avant",
-    "slice.beyondCourse":
-      "Son aire exacte demande des mathématiques au-delà de ce cours ; elle est donc arrondie.",
     "slice.position.sphere": "Hauteur au-dessus du point le plus bas",
     "slice.position.level": "Hauteur au-dessus de la face du bas",
     "slice.position.frontToBack": "Distance depuis le côté gauche",

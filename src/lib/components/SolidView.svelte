@@ -46,6 +46,7 @@
     compact = false,
     lift = 0,
     chrome = 0,
+    shift = 0,
     onGrid,
   }: {
     lab: LabState;
@@ -65,6 +66,12 @@
      * window shrunk around it gives up shape rather than burying it.
      */
     chrome?: number;
+    /**
+     * How far left of the middle to hold the shape, in CSS pixels, for a
+     * drawing that shares the window with something along its right edge. The
+     * shape is fitted to what is left of the width beside it.
+     */
+    shift?: number;
     /**
      * Where to report the size of one grid square, in the shape's own units.
      * The step is settled here, out of the fit to this element, but it is read
@@ -97,12 +104,14 @@
   const room = $derived(stageRoom(boxHeight, chrome));
   /** Where the middle of the shape lands, measured down from the top edge. */
   const centerY = $derived(halfHeight - rise);
+  /** Where the middle of the shape lands, measured in from the left edge. */
+  const centerX = $derived(halfWidth - Math.min(shift, halfWidth / 2));
   /** The extent of the largest solid the sliders reach: a sphere of radius 20. */
   const FULL_EXTENT = DIMENSION_MAX;
   const scale = $derived(
     // The fit is measured against the clear band, not the window, so the solid
     // grows into the room it actually has.
-    (Math.min(halfWidth, room) *
+    (Math.min(centerX, room) *
       0.78 *
       fitFraction(lab.mesh.extent, FULL_EXTENT)) /
       lab.mesh.extent,
@@ -494,7 +503,7 @@
           // A face shows its exact area only: the rounded reading belongs to
           // the totals card, where there is room to explain it.
           value: formatExact(surface.exact),
-          x: halfWidth + running.x / running.area,
+          x: centerX + running.x / running.area,
           y: centerY + running.y / running.area,
         };
       });
@@ -538,7 +547,7 @@
           approximate: formatApproximate(value).rounded
             ? `${approximateText(value)} ${linear}`
             : null,
-          x: halfWidth + drawn.mid[0] * push,
+          x: centerX + drawn.mid[0] * push,
           y: centerY + drawn.mid[1] * push,
         },
       ];
@@ -786,7 +795,7 @@
     class="h-full w-full touch-none select-none"
     class:cursor-grab={!dragging}
     class:cursor-grabbing={dragging}
-    viewBox="{-halfWidth} {-centerY} {halfWidth * 2} {halfHeight * 2}"
+    viewBox="{-centerX} {-centerY} {halfWidth * 2} {halfHeight * 2}"
     role="img"
     tabindex="0"
     aria-label={description}
@@ -826,7 +835,7 @@
         layers={floorLayers}
         {footprint}
         view={{
-          x: -halfWidth,
+          x: -centerX,
           y: -centerY,
           width: halfWidth * 2,
           height: halfHeight * 2,
@@ -1047,7 +1056,7 @@
     {#if slicing && lab.slicePosition !== null}
       <span
         class="absolute -translate-x-1/2 -translate-y-1/2 rounded-md border border-[#7c2d12]/40 bg-panel/90 px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap text-[#7c2d12] shadow-sm"
-        style:left="{halfWidth + slicing.travel.mid[0]}px"
+        style:left="{centerX + slicing.travel.mid[0]}px"
         style:top="{centerY + slicing.travel.mid[1]}px"
         data-testid="slice-travel-label">{lab.slicePosition}</span
       >
@@ -1055,7 +1064,7 @@
     {#if slicing?.angle}
       <span
         class="absolute -translate-x-1/2 -translate-y-1/2 font-mono text-xs font-bold text-[#7c2d12]"
-        style:left="{halfWidth + slicing.angle.label[0]}px"
+        style:left="{centerX + slicing.angle.label[0]}px"
         style:top="{centerY + slicing.angle.label[1]}px"
         data-testid="slice-angle-label">{slicing.angle.degrees}°</span
       >
@@ -1160,7 +1169,7 @@
         class="pointer-events-auto absolute h-16 w-16 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full focus-visible:outline-2 focus-visible:outline-accent"
         class:cursor-grab={!sliding}
         class:cursor-grabbing={sliding}
-        style:left="{halfWidth + slicing.handle.at[0]}px"
+        style:left="{centerX + slicing.handle.at[0]}px"
         style:top="{centerY + slicing.handle.at[1]}px"
         onpointerdown={onHandleDown}
         onpointermove={onHandleMove}

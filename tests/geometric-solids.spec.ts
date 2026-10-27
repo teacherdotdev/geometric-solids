@@ -462,6 +462,43 @@ async function dragSlice(page: Page, dx: number, dy: number) {
   await page.mouse.up();
 }
 
+test("lays the cross section over the solid in a round window", async ({
+  page,
+}) => {
+  await page.getByTestId("view-slice").click();
+  const viewport = page.viewportSize()!;
+
+  // The cut is a circle at the right; the solid moves over to the left of it.
+  const section = (await page.getByTestId("section-view").boundingBox())!;
+  expect(section.width).toBeCloseTo(section.height, 0);
+  expect(section.x).toBeGreaterThan(viewport.width / 2);
+  const handle = (await page.getByTestId("slice-handle").boundingBox())!;
+  expect(handle.x + handle.width).toBeLessThan(section.x);
+  expect(handle.x + handle.width / 2).toBeLessThan(viewport.width / 2);
+
+  // The slice controls sit in the top right, under the view tabs, and hold
+  // only the three directions and, where it can turn, a turn button.
+  const sliceControls = page.getByTestId("slice-controls");
+  await expect(sliceControls.getByRole("radio")).toHaveText([
+    "Horizontal",
+    "Vertical",
+    "Diagonal",
+  ]);
+  await expect(sliceControls).not.toContainText("Height");
+  await page.getByTestId("slice-vertical").click();
+  await expect(page.getByTestId("slice-turn")).toHaveAccessibleName(
+    /front to back/,
+  );
+  // Only said, not shown: the button is just its round icon.
+  const turn = (await page.getByTestId("slice-turn").boundingBox())!;
+  expect(turn.width).toBeLessThan(36);
+  const controls = (await page.getByTestId("slice-controls").boundingBox())!;
+  const tabs = (await page.getByTestId("view-slice").boundingBox())!;
+  expect(controls.y).toBeGreaterThan(tabs.y);
+  expect(controls.y).toBeLessThan(viewport.height / 2);
+  expect(controls.x + controls.width).toBeGreaterThan(viewport.width - 24);
+});
+
 test("slices a solid and draws the cross section face-on", async ({ page }) => {
   const before = await totals(page);
   await page.getByTestId("view-slice").click();
@@ -566,8 +603,9 @@ test("slices vertically and diagonally, turning a quarter at a time", async ({
   }
 
   // A diagonal moves straight up and down: dragging the arrow up raises it.
-  await expect(page.getByTestId("slice-controls")).toContainText(
-    "Height risen from where it first touches",
+  await expect(sliceHandle(page)).toHaveAttribute(
+    "aria-label",
+    /Height risen from where it first touches/,
   );
   const before = (await sliceHandle(page).boundingBox())!;
   await dragSlice(page, 0, -40);
@@ -695,8 +733,10 @@ test("slices a sphere into circles, with nowhere to turn", async ({ page }) => {
   // Every slice of a sphere is a circle, so there is only how high.
   await expect(page.getByTestId("slice-horizontal")).toHaveCount(0);
   await expect(page.getByTestId("slice-turn")).toHaveCount(0);
-  await expect(page.getByTestId("slice-controls")).toContainText(
-    "Height above the lowest point",
+  await expect(page.getByTestId("slice-controls")).toHaveCount(0);
+  await expect(sliceHandle(page)).toHaveAttribute(
+    "aria-label",
+    /Height above the lowest point/,
   );
 
   await moveSliceTo(page, 1);
@@ -718,7 +758,6 @@ test("slices a cylinder into an ellipse, or part of one with a rounded area", as
   await moveSliceTo(page, 3);
   await expect(page.getByTestId("section-name")).toHaveText("Ellipse");
   await expect(page.getByTestId("section-area")).toContainText("√2π");
-  await expect(page.getByTestId("section-beyond-course")).toHaveCount(0);
 
   // A squat cylinder: the cut runs through both disks.
   await page.getByTestId("input-h").fill("1");
@@ -727,7 +766,6 @@ test("slices a cylinder into an ellipse, or part of one with a rounded area", as
     "Part of an ellipse",
   );
   await expect(page.getByTestId("section-area")).toContainText("≈");
-  await expect(page.getByTestId("section-beyond-course")).toBeVisible();
   // No formula to show, even when asked for the working.
   await page.getByTestId("section-card").hover();
   await expect(page.getByTestId("section-formula")).toHaveCount(0);
@@ -756,7 +794,6 @@ test("slices a cone into the conics, by how steep it is", async ({ page }) => {
   // Off the tip, a hyperbola region, with its area rounded.
   await moveSliceTo(page, 1);
   await expect(page.getByTestId("section-name")).toHaveText("Hyperbola region");
-  await expect(page.getByTestId("section-beyond-course")).toBeVisible();
 
   // Steeper than 45°: an ellipse.
   await page.getByTestId("slice-diagonal").click();

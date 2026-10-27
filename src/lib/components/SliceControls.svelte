@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * Which way the cutting plane faces: horizontal, vertical or diagonal,
-   * turned a quarter at a time, and what its position measures. The plane is
-   * moved by the arrow drawn on it in the solid view.
+   * turned a quarter at a time. The plane is moved by the arrow drawn on it in
+   * the solid view, which also says what its position measures. Every slice
+   * of a sphere is a circle, so a sphere has nothing here to choose.
    */
   import {
     SLICE_DIRECTIONS,
@@ -10,7 +11,7 @@
     type SliceDirection,
     type SliceHeading,
   } from "$lib/domain/crossSections";
-  import { slicePositionLabel, t } from "$lib/i18n/index.svelte";
+  import { t } from "$lib/i18n/index.svelte";
   import type { LabState } from "$lib/state/lab.svelte";
 
   let { lab }: { lab: LabState } = $props();
@@ -35,24 +36,19 @@
     front: () => t("slice.heading.front"),
   };
   const turns = $derived(SLICE_HEADINGS[lab.sliceDirection].length > 1);
-  /** Every slice of a sphere is a circle: it has nowhere to turn. */
   const round = $derived(lab.kind === "sphere");
 
   const choice =
     "cursor-pointer rounded-lg px-2 py-1 text-xs font-bold transition";
-
-  const label = $derived(
-    slicePositionLabel(lab.kind, lab.sliceDirection, lab.sliceHeading),
-  );
 </script>
 
-<div
-  class="pointer-events-auto flex flex-col items-center gap-1 rounded-xl border border-rule/70 bg-panel/85 p-1.5 shadow-lg shadow-ink/10 backdrop-blur-md"
-  role="group"
-  aria-label={t("slice.label")}
-  data-testid="slice-controls"
->
-  {#if !round}
+{#if !round}
+  <div
+    class="pointer-events-auto flex flex-col items-center gap-1 rounded-xl border border-rule/70 bg-panel/85 p-1.5 shadow-lg shadow-ink/10 backdrop-blur-md"
+    role="group"
+    aria-label={t("slice.label")}
+    data-testid="slice-controls"
+  >
     <div class="flex flex-wrap items-center justify-center gap-1">
       <div class="flex" role="radiogroup" aria-label={t("slice.direction")}>
         {#each SLICE_DIRECTIONS as direction (direction)}
@@ -79,7 +75,7 @@
       {#if turns}
         <button
           type="button"
-          class="{choice} flex items-center gap-1 border border-rule text-ink-soft hover:border-accent hover:text-accent"
+          class="grid h-7 w-7 cursor-pointer place-items-center rounded-full border border-rule text-ink-soft transition hover:border-accent hover:text-accent"
           data-testid="slice-turn"
           aria-label={t("slice.turn", {
             heading: headingNames[lab.sliceHeading](),
@@ -101,14 +97,13 @@
             <path d="M20 12a8 8 0 1 1-2.34-5.66" />
             <path d="M20 4v5h-5" />
           </svg>
-          <span data-testid="slice-heading"
+          <!-- Which way it is turned now is only said, not shown: the plane
+               on the solid shows it. -->
+          <span class="sr-only" data-testid="slice-heading"
             >{headingNames[lab.sliceHeading]()}</span
           >
         </button>
       {/if}
     </div>
-  {/if}
-  <p class="text-xs font-bold text-ink-soft" data-testid="slice-measure">
-    {label}
-  </p>
-</div>
+  </div>
+{/if}

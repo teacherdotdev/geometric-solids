@@ -103,7 +103,7 @@ perpendicular to it, or at a diagonal.
 - A **Slice** tab sits after Net: Solid | Cubes | Net | Slice. It is offered for all seven picker solids. The logo solid's Slice tab is greyed out with a one-line reason, and choosing the logo while in Slice returns to the Solid view.
 - Directions are measured against the solid's **bottom face**, the face it stands on. For the triangular prism that is the leg-a rectangle, not one of its triangular bases, so its horizontal slices are rectangles.
 - Three buttons choose the **slice direction**: **Horizontal**, **Vertical** and **Diagonal**. Their hints and accessible descriptions say "parallel to the bottom face" and "perpendicular to the bottom face". Vertical has two headings (front to back, side to side) and Diagonal four (a 45° plane leaning toward the front, back, left or right); a turn button steps through them. The same seven slices are offered on every solid; on the cylinder and cone the four diagonals give the same cross section, which is itself worth noticing. The sphere has no direction controls, because every slice of a sphere is a circle.
-- A double-headed **arrow** at the middle of the cross section moves the cutting plane along one axis, in the solid's units and steps of 0.1. Dragging it moves the plane along the arrow, at the pace of the pointer; only the part of a drag along the arrow counts, so dragging the arrow never turns the solid. It is a focusable slider: the arrow keys step it by 0.1, Page Up and Page Down by 1, Home and End to either end. There is no other slider or typed entry for the position. What it measures is named under the direction buttons:
+- A double-headed **arrow** at the middle of the cross section moves the cutting plane along one axis, in the solid's units and steps of 0.1. Dragging it moves the plane along the arrow, at the pace of the pointer; only the part of a drag along the arrow counts, so dragging the arrow never turns the solid. It is a focusable slider: the arrow keys step it by 0.1, Page Up and Page Down by 1, Home and End to either end. There is no other slider or typed entry for the position. What it measures is part of the arrow's accessible name:
   - Horizontal: height above the bottom face.
   - Vertical: distance in from the side.
   - Diagonal: the plane moves straight up and down, so the arrow points up. The position is how far it has risen from where it first touches the solid: the bottom edge, or the foot of the rim, on the side it rises toward.
@@ -112,12 +112,13 @@ perpendicular to it, or at a diagonal.
   The position is drawn on the solid as a measured line, and the 90° or 45° angle between the cutting plane and the bottom face is marked.
 - The arrow stops just short of both ends, where the plane would only touch the solid at a point, an edge or a face, so there is always a real cross section. Changing direction, heading, solid or dimensions keeps the position, pulled back into range when it no longer fits. Slice opens on Horizontal at half height.
 - On the solid, the cutting plane is drawn see-through and the cross section is outlined where it meets the surface. The solid is not cut apart. Drag, keyboard rotation and reset work as in the Solid view and the plane turns with the solid; auto-rotation is turned off.
-- The stage splits: the solid and its plane on one side, the **cross-section drawing** on the other, always side by side. The panels run along the top and bottom edges, so the room they leave is a band across the middle; both halves are fitted into it, on a phone as in the floating window. The drawing is the cross section seen face-on, at the same scale as the solid beside it and on a unit grid.
+- The solid and its plane keep the stage, moved over to the left. The **cross-section drawing** is a round window beside it at the right edge, in the band between the view controls and the panels along the bottom, sized to fit it on a phone as in the floating window. The drawing is the cross section seen face-on, fitted to the whole solid rather than to the cut, so a slice near a tip still comes out small. It is ruled at its own scale, with its own key to the grid on the window's rim.
+- The slice controls hang under the view controls in the top right, as the cube player does in the Cubes view. They hold only the three direction buttons and, where the direction has more than one heading, a round turn button; what the position measures is said by the arrow on the solid. The sphere has no slice controls.
 - The drawing always shows:
   - the cross section's most specific name: square rather than rectangle; equilateral, isosceles or right triangle where true, otherwise triangle; trapezoid; circle, ellipse, part of an ellipse, parabola region, hyperbola region. These slice directions never give a pentagon or hexagon;
   - a length on every straight side;
   - on a curved cross section, the radius, the two axes of an ellipse, or the width and height of a region;
-  - its area, in a card beside it.
+  - its area, in a card hanging from the bottom of the window.
 - Pointing at an edge of the drawing measures it, and lights the matching segment of the outline on the solid. Pointing at the cross section shows its formula, substitution and area, with the height line that ½bh or ½(b₁ + b₂)h needs drawn in. Clicking keeps the measurement on screen. Each edge and the cross section have focusable badges, so every measurement is reachable without a pointer.
 - Area formulas: the standard formula wherever there is one (lw, s², ½bh, ½(b₁ + b₂)h, πr², πab). A parabola region uses Archimedes' ⅔wh. Part of an ellipse and a hyperbola region show an approximate area only, with no formula and a note that working it out needs mathematics beyond this course.
 - Numbers follow the rest of the app: exact with an approximation beside it, and approximate only where the app cannot write an exact value — mainly cylinder and cone slices that cut through a disk.
@@ -188,8 +189,8 @@ Built as a single prerendered SvelteKit page.
   that every edge carrying it responds to, or one side of the cross section
   (or the whole of it), on both of the slice view's drawings at once.
 - `src/lib/components/` renders the solid, its unit cubes (`CubeView.svelte`),
-  the net, and in the slice view the see-through solid beside the face-on
-  cross section (`CrossSectionView.svelte`, with `SliceControls.svelte`) as
+  the net, and in the slice view the see-through solid under a round window
+  holding the face-on cross section (`CrossSectionView.svelte`, with `SliceControls.svelte`) as
   accessible SVG. The
   shape fills the screen; four small panels float over it — the solid picker
   top left, the view, unit, and floating-window controls top right, the

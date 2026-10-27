@@ -116,13 +116,25 @@
   );
   /** What the panels cost the drawing altogether, top and bottom. */
   const chrome = $derived(floating ? topHeight + bottomHeight : 0);
+
+  // The slice view's round window hangs at the right edge, between the view
+  // controls above it and the row of panels along the bottom, so it measures
+  // what those two have left of the window's height there. The whole row
+  // counts, not just the answers: on a phone the row stacks into a column.
+  let stageHeight = $state(0);
+  let portholeWidth = $state(0);
+  /** The free band down the right edge, in pixels from the top of the window. */
+  const portholeTop = $derived(8 + topHeight + 8);
+  const portholeRoom = $derived(
+    Math.max(0, stageHeight - portholeTop - (8 + bottomHeight + 8)),
+  );
   /**
-   * A slice shares the screen between two drawings, each half as wide, so on a
-   * narrow screen even the full page has to fit them between the panels rather
-   * than under them: it measures them the way the floating window does.
+   * The solid moves left by half of what the window takes, so it sits in the
+   * middle of the width left beside it rather than under it.
    */
-  const sliceLift = $derived(Math.max(0, (bottomHeight - topHeight) / 2));
-  const sliceChrome = $derived(topHeight + bottomHeight);
+  const portholeShift = $derived(
+    portholeWidth > 0 ? (portholeWidth + 24) / 2 : 0,
+  );
 
   // The widths along the bottom edge, for deciding whether the view controls
   // can keep the row with the panels either side of them.
@@ -162,6 +174,7 @@
 <div
   class="relative h-[100dvh] w-full overflow-hidden bg-gradient-to-b from-paper to-accent-soft/50"
   data-ready={ready ? "true" : undefined}
+  use:measureBox={(_width, height) => (stageHeight = height)}
 >
   <h1 class="sr-only">{t("app.name")}</h1>
 
@@ -191,32 +204,31 @@
         onGrid={(step) => (gridStep = step)}
       />
     {:else if lab.view === "slice" && lab.section}
-      <!-- The solid with its cut on one side, the cut itself face-on on the
-           other. Always side by side: the panels run along the top and bottom
-           edges, so the room they leave is a band across the middle, and the
-           lower of two drawings stacked one above the other would sit under
-           the bottom row of panels. -->
-      <div class="flex h-full w-full">
-        <div class="relative min-h-0 min-w-0 flex-1">
-          <SolidView
-            {lab}
-            {reducedMotion}
-            {animationWindow}
-            compact={floating}
-            lift={sliceLift}
-            chrome={sliceChrome}
-            onGrid={(step) => (gridStep = step)}
-          />
-        </div>
-        <div class="relative min-h-0 min-w-0 flex-1">
-          <CrossSectionView
-            {lab}
-            section={lab.section}
-            compact={floating}
-            lift={sliceLift}
-            chrome={sliceChrome}
-          />
-        </div>
+      <!-- The solid with its cut keeps the stage, moved over to the left; the
+           cut itself, face-on, is a round window beside it on the right, in
+           the band the panels along the top and bottom leave free. -->
+      <SolidView
+        {lab}
+        {reducedMotion}
+        {animationWindow}
+        compact={floating}
+        {lift}
+        {chrome}
+        shift={portholeShift}
+        onGrid={(step) => (gridStep = step)}
+      />
+      <div
+        class="pointer-events-none absolute right-2 z-10 flex items-center sm:right-4"
+        style:top="{portholeTop}px"
+        style:height="{portholeRoom}px"
+        use:measureBox={(width) => (portholeWidth = width)}
+      >
+        <CrossSectionView
+          {lab}
+          section={lab.section}
+          compact={floating}
+          room={portholeRoom}
+        />
       </div>
     {:else if lab.view === "cubes" && lab.cubes}
       <CubeView
@@ -266,7 +278,8 @@
 
   <!-- Top right: which view, what the numbers are called, and whether the lab
        floats over other tabs. The row wraps in a small floating window. In the
-       cubes view the player for the cubes hangs under it. -->
+       cubes view the player for the cubes hangs under it, and in the slice
+       view the controls for the cutting plane. -->
   <div
     class="pointer-events-none absolute top-2 right-2 z-20 flex flex-col items-end gap-1.5"
     use:measureBox={(_width, height) => (topHeight = height)}
@@ -298,6 +311,8 @@
     </div>
     {#if lab.view === "cubes"}
       <CubeControls {lab} />
+    {:else if lab.view === "slice" && lab.section}
+      <SliceControls {lab} />
     {/if}
   </div>
 
@@ -351,9 +366,6 @@
         class="flex flex-col items-center gap-1.5"
         use:measureBox={(width) => (middleWidth = width)}
       >
-        {#if lab.view === "slice" && lab.section}
-          <SliceControls {lab} />
-        {/if}
         <RotationControls {lab} {reducedMotion} compact={floating} />
       </div>
     </div>
