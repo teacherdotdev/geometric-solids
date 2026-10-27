@@ -106,7 +106,7 @@ perpendicular to it, or at a diagonal.
 - One **slice position** slider moves the cutting plane along one axis, in the solid's units and steps of 0.1, with a typed entry like the dimension inputs:
   - Horizontal: height above the bottom face.
   - Vertical: distance in from the side.
-  - Diagonal: how far the plane has slid, along the line it leans along, from where it first touches the solid.
+  - Diagonal: the plane moves straight up and down. The position is how far it has risen from where it first touches the solid: the bottom edge, or the foot of the rim, on the side it rises toward.
   - Sphere: height above its lowest point.
 
   The position is drawn on the solid as a measured line, and the 90° or 45° angle between the cutting plane and the bottom face is marked.

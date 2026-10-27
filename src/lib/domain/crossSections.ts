@@ -69,8 +69,8 @@ export interface Slice {
   /**
    * How far the plane has moved along its one axis from where it first
    * touches the solid: height above the bottom face, distance in from the left
-   * or the back, or, for a diagonal, how far it has slid along the line it
-   * leans along.
+   * or the back, or, for a diagonal, how far it has risen straight up from the
+   * bottom edge it first touches.
    */
   readonly position: Rational;
 }
@@ -187,6 +187,8 @@ export interface CrossSection {
    * what the plane touches first, along its one axis, to the plane as it is.
    */
   readonly travel: { readonly from3d: Vec3; readonly to3d: Vec3 };
+  /** The unit direction the plane moves in as the position grows. */
+  readonly slide: Vec3;
   /**
    * Where the plane meets the bottom face's level, and the two directions the
    * angle between them opens along. Null for a horizontal slice, which is
@@ -212,9 +214,9 @@ interface Polyhedron {
 }
 
 interface PlaneFrame {
-  /** The normal. Its component along the slide axis is 1. */
+  /** The normal. Its component along the slide axis is 1 or −1. */
   readonly normal: IVec3;
-  /** The one axis the plane moves along. */
+  /** The one axis the plane moves along, a unit vector. */
   readonly slide: IVec3;
   /** The drawing's x axis: a unit vector lying in the plane. */
   readonly across: IVec3;
@@ -245,30 +247,30 @@ const FRAMES: Record<SliceHeading, PlaneFrame> = {
     up: [0, 1, 0],
   },
   // Each diagonal is seen square-on from above it, uphill at the top. The four
-  // are quarter turns of one another: each slides the way it rises, starting
-  // from the side it rises away from, so a round solid gives the same cut at
-  // the same position whichever way the slice is turned.
+  // are quarter turns of one another: each slides straight up, starting from
+  // the bottom edge on the side it rises toward, so a round solid gives the
+  // same cut at the same position whichever way the slice is turned.
   right: {
     normal: [1, -1, 0],
-    slide: [1, 0, 0],
+    slide: [0, 1, 0],
     across: [0, 0, 1],
     up: [1, 1, 0],
   },
   left: {
     normal: [-1, -1, 0],
-    slide: [-1, 0, 0],
+    slide: [0, 1, 0],
     across: [0, 0, -1],
     up: [-1, 1, 0],
   },
   front: {
     normal: [0, -1, 1],
-    slide: [0, 0, 1],
+    slide: [0, 1, 0],
     across: [-1, 0, 0],
     up: [0, 1, 1],
   },
   back: {
     normal: [0, -1, -1],
-    slide: [0, 0, -1],
+    slide: [0, 1, 0],
     across: [1, 0, 0],
     up: [0, 1, -1],
   },
@@ -387,6 +389,15 @@ function lerp(a: RVec3, b: RVec3, t: Rational): RVec3 {
   return [0, 1, 2].map((i) =>
     add(a[i], mul(t, add(b[i], mul(a[i], rational(-1))))),
   ) as unknown as RVec3;
+}
+
+/**
+ * Whether the plane's c grows as it slides. A diagonal's normal points down
+ * its slope, so sliding it up carries c down from the highest it reaches.
+ */
+function slidesForward(frame: PlaneFrame): boolean {
+  const [n, s] = [frame.normal, frame.slide];
+  return n[0] * s[0] + n[1] * s[1] + n[2] * s[2] > 0;
 }
 
 /** The lowest and highest the plane's c reaches over the solid. */
@@ -587,7 +598,12 @@ export function cutSolid(
   const [low, high] = reach(solid, frame.normal);
   if (!insideSpan(slice.position, add(high, mul(low, rational(-1)))))
     return null;
-  const corners = cornersOf(solid, frame, add(low, slice.position));
+  // The c the plane first touches the solid at, and the one it has reached.
+  const start = slidesForward(frame) ? low : high;
+  const c = slidesForward(frame)
+    ? add(low, slice.position)
+    : add(high, mul(slice.position, rational(-1)));
+  const corners = cornersOf(solid, frame, c);
   if (corners.length < 3) return null;
 
   const scale = upScale(frame);
@@ -640,7 +656,7 @@ export function cutSolid(
   // Where the plane first touched the solid: the middle of the face, edge or
   // corner it met first. The position is measured from there.
   const touching = solid.vertices.filter((vertex) =>
-    equals(dotI(frame.normal, vertex), low),
+    equals(dotI(frame.normal, vertex), start),
   );
   const touch: RVec3 = [0, 1, 2].map((i) =>
     touching.reduce(
@@ -695,6 +711,7 @@ export function cutSolid(
         shift(touch, frame.slide, mul(slice.position, rational(-1))),
       ),
     },
+    slide: unit(frame.slide),
     angle,
   };
 }
@@ -1144,6 +1161,11 @@ function cylinderDiagonal(
   };
 }
 
+/** The level direction a diagonal rises toward: its uphill, flattened. */
+function risingOf(frame: PlaneFrame): Vec3 {
+  return [frame.up[0], 0, frame.up[2]];
+}
+
 /** The cross section of a round solid, in the mesh's frame. */
 function roundGeometry(
   kind: SolidKind,
@@ -1199,9 +1221,9 @@ function roundGeometry(
       equals(mul(halfWidthSquared, rational(4)), mul(height, height)),
     );
   }
-  // A diagonal rises along its sliding axis s: the plane is s − y = c, and
-  // the position carries c up from where it first touches the rim.
-  const rising: Vec3 = [frame.slide[0], frame.slide[1], frame.slide[2]];
+  // A diagonal rises along the level direction s: the plane is s − y = c,
+  // and `position` carries c up from the lowest it reaches over the cylinder.
+  const rising = risingOf(frame);
   // Measured along `rising`, the plane is y = s − offset.
   const offset = add(mul(add(radius, halfHeight), rational(-1)), position);
   // Level and square to `rising`: the ellipse's short axis.
@@ -1243,14 +1265,26 @@ function cutRound(
   const heading = kind === "sphere" ? "level" : slice.heading;
   const span = roundSpan(kind, d, heading);
   if (!span || !insideSpan(slice.position, span)) return null;
-  const geometry = roundGeometry(kind, d, heading, slice.position);
-  if (!geometry) return null;
   const frame = FRAMES[heading];
+  // The geometry below measures c up from its lowest; a diagonal sliding up
+  // starts from its highest instead.
+  const forward = slidesForward(frame);
+  const geometry = roundGeometry(
+    kind,
+    d,
+    heading,
+    forward ? slice.position : add(span, mul(slice.position, rational(-1))),
+  );
+  if (!geometry) return null;
   const across = unitOf(frame.across);
   const up = unitOf(frame.up);
   const flat = (point: Vec3): Point2 => [dotF(point, across), dotF(point, up)];
 
-  const touch = roundTouch(kind, d, frame.normal);
+  const touch = roundTouch(
+    kind,
+    d,
+    forward ? frame.normal : times(frame.normal, -1),
+  );
   const bottom =
     kind === "sphere" ? -toNumber(r(d, "r")) : -toNumber(r(d, "h")) / 2;
   const centre = geometry.centre;
@@ -1286,6 +1320,7 @@ function cutRound(
       from3d: touch,
       to3d: plus(touch, times(frame.slide, toNumber(slice.position))),
     },
+    slide: unitOf(frame.slide),
     angle:
       heading === "level"
         ? null
@@ -1453,14 +1488,14 @@ function coneGeometry(
     return hyperbolaOf(region);
   }
 
-  // A diagonal. It rises along its sliding axis s, so the plane is
+  // A diagonal. It rises along the level direction s, so the plane is
   // y = s − c, and a point on it is inside the cone when
   //   q² ≤ f(s) = k²(m − s)² − s²,  m = h/2 + c,  k = r/h,
   // above the base (s ≥ c − h/2) and below the tip (s ≤ m). That is an
   // ellipse when the cone is steeper than the plane (k < 1), a parabola when
   // it is as steep (k = 1) and a hyperbola when it is flatter (k > 1).
   const c = add(coneStart(radius, height), position);
-  const rising: Vec3 = [frame.slide[0], frame.slide[1], frame.slide[2]];
+  const rising = risingOf(frame);
   const sideways: Vec3 = [-rising[2], 0, rising[0]];
   const k = div(radius, height);
   const m = add(half, c);

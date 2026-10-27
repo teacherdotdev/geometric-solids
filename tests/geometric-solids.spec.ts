@@ -700,7 +700,7 @@ test("slices a cone into the conics, by how steep it is", async ({ page }) => {
 
   // Steeper than 45°: an ellipse.
   await page.getByTestId("slice-diagonal").click();
-  await page.getByTestId("input-slice-position").fill("1");
+  await page.getByTestId("input-slice-position").fill("6");
   await expect(page.getByTestId("section-name")).toHaveText("Ellipse");
 
   // Exactly 45°: a parabola region, whose area Archimedes worked out exactly.
@@ -716,7 +716,7 @@ test("slices a cone into the conics, by how steep it is", async ({ page }) => {
 
   // Flatter than 45°: a hyperbola region.
   await page.getByTestId("input-r").fill("4");
-  await page.getByTestId("input-slice-position").fill("3");
+  await page.getByTestId("input-slice-position").fill("5");
   await expect(page.getByTestId("section-name")).toHaveText("Hyperbola region");
 });
 

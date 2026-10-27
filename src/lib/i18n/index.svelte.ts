@@ -64,7 +64,7 @@ const en = {
     "slice.position.level": "Height above the bottom face",
     "slice.position.frontToBack": "Distance in from the left side",
     "slice.position.sideToSide": "Distance in from the back",
-    "slice.position.diagonal": "Distance slid from where it first touches",
+    "slice.position.diagonal": "Height risen from where it first touches",
     "slice.drawing":
       "The cross section, seen face-on: {name}, with sides {sides} {unit}.",
     "slice.hiddenName": "shape hidden",
@@ -264,8 +264,7 @@ const es = {
     "slice.position.level": "Altura sobre la cara inferior",
     "slice.position.frontToBack": "Distancia desde el lado izquierdo",
     "slice.position.sideToSide": "Distancia desde atrás",
-    "slice.position.diagonal":
-      "Distancia recorrida desde donde toca por primera vez",
+    "slice.position.diagonal": "Altura subida desde donde toca por primera vez",
     "slice.drawing":
       "La sección transversal, vista de frente: {name}, con lados {sides} {unit}.",
     "slice.hiddenName": "figura oculta",
@@ -560,7 +559,7 @@ const fr = {
     "slice.position.level": "Hauteur au-dessus de la face du bas",
     "slice.position.frontToBack": "Distance depuis le côté gauche",
     "slice.position.sideToSide": "Distance depuis l’arrière",
-    "slice.position.diagonal": "Distance parcourue depuis le premier contact",
+    "slice.position.diagonal": "Hauteur montée depuis le premier contact",
     "slice.drawing":
       "La section, vue de face : {name}, de côtés {sides} {unit}.",
     "slice.hiddenName": "figure masquée",

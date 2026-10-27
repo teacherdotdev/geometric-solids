@@ -253,8 +253,8 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
     expect(toNumber(sliceSpan("rectangularPrism", PRISM, "sideToSide")!)).toBe(
       4,
     );
-    // A diagonal slides from one top edge to the opposite bottom one: the length
-    // plus the height.
+    // A diagonal rises from one bottom edge until it leaves the opposite top
+    // one: the length plus the height.
     expect(toNumber(sliceSpan("rectangularPrism", PRISM, "right")!)).toBe(8);
     expect(toNumber(sliceSpan("rectangularPrism", PRISM, "front")!)).toBe(9);
 
@@ -278,6 +278,31 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
         ),
       ).toBeCloseTo(1.5);
     }
+  });
+
+  it("raise a diagonal straight up from the bottom edge it rises toward", () => {
+    for (const heading of ["right", "back", "left", "front"] as const) {
+      const section = cut("cube", { s: 2 }, sliceOf(heading, 1.5));
+      expect(section.slide).toEqual([0, 1, 0]);
+      const [x, y, z] = section.travel.from3d;
+      expect(y).toBeCloseTo(-1);
+      expect(section.travel.to3d[0]).toBeCloseTo(x);
+      expect(section.travel.to3d[1]).toBeCloseTo(0.5);
+      expect(section.travel.to3d[2]).toBeCloseTo(z);
+    }
+    // Rising toward the right, it first touches the bottom right edge, and
+    // crosses the right face as high as it has risen.
+    const right = cut("cube", { s: 2 }, sliceOf("right", 1.5));
+    expect(right.travel.from3d[0]).toBeCloseTo(1);
+    expect(
+      right.outline3d.some(
+        ([px, py]) => px > 0.999 && py > 0.499 && py < 0.501,
+      ),
+    ).toBe(true);
+    // A cone's starts at the foot of the rim on that side.
+    const cone = cut("cone", { r: 3, h: 4 }, sliceOf("right", 2));
+    expect(cone.travel.from3d[0]).toBeCloseTo(3);
+    expect(cone.travel.from3d[1]).toBeCloseTo(-2);
   });
 
   it("mark a right angle for a vertical slice, 45° for a diagonal, and none level", () => {
@@ -449,13 +474,13 @@ describe("slices of a right-triangular prism", () => {
   });
 
   it("lean into a rectangle one way and a trapezoid or triangle the other", () => {
-    expect(cut("triangularPrism", PRISM3, sliceOf("right", 3)).name).toBe(
+    expect(cut("triangularPrism", PRISM3, sliceOf("right", 4)).name).toBe(
       "Rectangle",
     );
-    expect(cut("triangularPrism", PRISM3, sliceOf("front", 7)).name).toBe(
+    expect(cut("triangularPrism", PRISM3, sliceOf("front", 2)).name).toBe(
       "Trapezoid",
     );
-    expect(cut("triangularPrism", PRISM3, sliceOf("front", 3)).name).toBe(
+    expect(cut("triangularPrism", PRISM3, sliceOf("front", 6)).name).toBe(
       "Right triangle",
     );
   });
@@ -591,18 +616,18 @@ describe("slices of a cone", () => {
   });
 
   it("give an ellipse on a diagonal when the cone is steeper than 45°", () => {
-    const section = cut("cone", CONE, sliceOf("right", 1));
+    const section = cut("cone", CONE, sliceOf("right", 6));
     expect(section.name).toBe("Ellipse");
     expect(section.lines.map((line) => formatExact(line.length))).toEqual([
       "3√7/7",
       "12√2/7",
     ]);
     expect(formatExact(section.area.exact!)).toBe("36√14π/49");
-    // Further across, the cut runs into the base.
-    const part = cut("cone", CONE, sliceOf("right", 3));
+    // Lower down, the cut runs into the base.
+    const part = cut("cone", CONE, sliceOf("right", 4));
     expect(part.name).toBe("Part of an ellipse");
     expect(part.area.exact).toBeNull();
-    expect(lengths("cone", CONE, sliceOf("right", 3))).toEqual(["4√2"]);
+    expect(lengths("cone", CONE, sliceOf("right", 4))).toEqual(["4√2"]);
   });
 
   it("give a parabola region, worked out exactly, when the cone is at 45°", () => {
@@ -614,13 +639,13 @@ describe("slices of a cone", () => {
   });
 
   it("give a hyperbola region when the cone is flatter, and a triangle through its tip", () => {
-    const section = cut("cone", { r: 4, h: 2 }, sliceOf("right", 3));
+    const section = cut("cone", { r: 4, h: 2 }, sliceOf("right", 5));
     expect(section.name).toBe("Hyperbola region");
     expect(section.area.exact).toBeNull();
 
-    const tip = cut("cone", { r: 4, h: 2 }, sliceOf("right", 2));
+    const tip = cut("cone", { r: 4, h: 2 }, sliceOf("right", 6));
     expect(tip.name).toBe("Isosceles triangle");
-    expect(lengths("cone", { r: 4, h: 2 }, sliceOf("right", 2))).toEqual([
+    expect(lengths("cone", { r: 4, h: 2 }, sliceOf("right", 6))).toEqual([
       "2√5",
       "2√5",
       "4√3",
