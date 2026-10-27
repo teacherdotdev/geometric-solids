@@ -434,6 +434,34 @@ async function sectionSides(page: Page): Promise<string[]> {
   return values.sort();
 }
 
+/** The arrow on the cutting plane, which moves it. */
+function sliceHandle(page: Page): Locator {
+  return page.getByTestId("slice-handle");
+}
+
+/** Move the cutting plane to a position from the keyboard, a step at a time. */
+async function moveSliceTo(page: Page, position: number) {
+  const handle = sliceHandle(page);
+  const now = Number(await handle.getAttribute("aria-valuenow"));
+  let tenths = Math.round((position - now) * 10);
+  await handle.focus();
+  for (; Math.abs(tenths) >= 10; tenths -= 10 * Math.sign(tenths))
+    await handle.press(tenths > 0 ? "PageUp" : "PageDown");
+  for (; tenths !== 0; tenths -= Math.sign(tenths))
+    await handle.press(tenths > 0 ? "ArrowUp" : "ArrowDown");
+  await expect(handle).toHaveAttribute("aria-valuenow", String(position));
+}
+
+/** Drag the arrow on the cutting plane by so many pixels across and down. */
+async function dragSlice(page: Page, dx: number, dy: number) {
+  const box = (await sliceHandle(page).boundingBox())!;
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 6 });
+  await page.mouse.up();
+}
+
 test("slices a solid and draws the cross section face-on", async ({ page }) => {
   const before = await totals(page);
   await page.getByTestId("view-slice").click();
@@ -444,7 +472,7 @@ test("slices a solid and draws the cross section face-on", async ({ page }) => {
   await expect(page.getByTestId("section-on-solid")).toBeAttached();
 
   // Half way up a 3 × 4 × 5 prism: a rectangle the size of its bottom face.
-  await expect(page.getByTestId("input-slice-position")).toHaveValue("2.5");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "2.5");
   await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
   expect(await sectionSides(page)).toEqual(["3", "3", "4", "4"]);
   await expect(page.getByTestId("section-area")).toContainText("12");
@@ -455,12 +483,24 @@ test("slices a solid and draws the cross section face-on", async ({ page }) => {
   // A slice holds still to be talked about.
   await expect(page.getByTestId("toggle-spin")).toBeDisabled();
 
-  // Moving the plane by slider, by typing or by a nudge keeps it a rectangle.
-  await page.getByTestId("range-slice-position").fill("4");
-  await expect(page.getByTestId("input-slice-position")).toHaveValue("4");
-  await page.getByTestId("input-slice-position").fill("0.5");
-  await page.getByTestId("increase-slice-position").click();
-  await expect(page.getByTestId("input-slice-position")).toHaveValue("0.6");
+  // Dragging the arrow up raises the plane, without turning the solid; the
+  // arrow keys move it a tenth at a time. It stays a rectangle.
+  const plane = await page.getByTestId("cutting-plane").getAttribute("points");
+  await dragSlice(page, 0, -60);
+  const raised = Number(await sliceHandle(page).getAttribute("aria-valuenow"));
+  expect(raised).toBeGreaterThan(2.5);
+  await expect(page.getByTestId("slice-travel-label")).toHaveText(
+    String(raised),
+  );
+  await dragSlice(page, 0, 60);
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "2.5");
+  await expect(page.getByTestId("cutting-plane")).toHaveAttribute(
+    "points",
+    plane!,
+  );
+  await moveSliceTo(page, 0.5);
+  await sliceHandle(page).press("ArrowUp");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "0.6");
   await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
   expect(await totals(page)).toEqual(before);
 });
@@ -489,14 +529,14 @@ test("slices vertically and diagonally, turning a quarter at a time", async ({
   // Front to back through a 3 × 4 × 5 prism, 2.5 in from the left: 4 by 5.
   await page.getByTestId("slice-vertical").click();
   await expect(page.getByTestId("slice-heading")).toHaveText("front to back");
-  await expect(page.getByTestId("input-slice-position")).toHaveValue("2.5");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "2.5");
   await expect(page.getByTestId("slice-angle-label")).toHaveText("90°");
   expect(await sectionSides(page)).toEqual(["4", "4", "5", "5"]);
 
   // A quarter turn: side to side, 3 by 5. The position stays where it was.
   await page.getByTestId("slice-turn").click();
   await expect(page.getByTestId("slice-heading")).toHaveText("side to side");
-  await expect(page.getByTestId("input-slice-position")).toHaveValue("2.5");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "2.5");
   expect(await sectionSides(page)).toEqual(["3", "3", "5", "5"]);
   await page.getByTestId("slice-turn").click();
   await expect(page.getByTestId("slice-heading")).toHaveText("front to back");
@@ -507,7 +547,7 @@ test("slices vertically and diagonally, turning a quarter at a time", async ({
   await expect(page.getByTestId("slice-heading")).toHaveText(
     "rising to the right",
   );
-  await page.getByTestId("input-slice-position").fill("2");
+  await moveSliceTo(page, 2);
   await expect(page.getByTestId("slice-angle-label")).toHaveText("45°");
   await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
   expect(await sectionSides(page)).toEqual(["2", "2", "2√2", "2√2"]);
@@ -524,6 +564,26 @@ test("slices vertically and diagonally, turning a quarter at a time", async ({
     await expect(page.getByTestId("slice-heading")).toHaveText(heading);
     await expect(page.getByTestId("section-area")).toContainText("4√2");
   }
+
+  // A diagonal moves straight up and down: dragging the arrow up raises it.
+  await expect(page.getByTestId("slice-controls")).toContainText(
+    "Height risen from where it first touches",
+  );
+  const before = (await sliceHandle(page).boundingBox())!;
+  await dragSlice(page, 0, -40);
+  const after = (await sliceHandle(page).boundingBox())!;
+  expect(
+    Number(await sliceHandle(page).getAttribute("aria-valuenow")),
+  ).toBeGreaterThan(2);
+  expect(after.y).toBeLessThan(before.y);
+  // Straight up: the arrow, and the plane it hangs on, never drift sideways.
+  expect(after.x).toBeCloseTo(before.x, 0);
+  await moveSliceTo(page, 0.5);
+  const lowest = (await sliceHandle(page).boundingBox())!;
+  await moveSliceTo(page, 3.5);
+  const highest = (await sliceHandle(page).boundingBox())!;
+  expect(highest.x).toBeCloseTo(lowest.x, 0);
+  expect(highest.y).toBeLessThan(lowest.y);
 
   // Slicing never changes the solid.
   await expect(page.getByTestId("surface-total")).toContainText("24");
@@ -584,14 +644,14 @@ test("slices a pyramid from a trapezoid into a triangle at its tip", async ({
   await page.getByTestId("view-slice").click();
 
   // Half way up a pyramid with base 6 and height 4: a square half as wide.
-  await page.getByTestId("input-slice-position").fill("2");
+  await moveSliceTo(page, 2);
   await expect(page.getByTestId("section-name")).toHaveText("Square");
   expect(await sectionSides(page)).toEqual(["3", "3", "3", "3"]);
   await expect(page.getByTestId("section-area")).toContainText("9");
 
   // Straight down through the tip: an isosceles triangle 6, 5, 5.
   await page.getByTestId("slice-vertical").click();
-  await page.getByTestId("input-slice-position").fill("3");
+  await moveSliceTo(page, 3);
   await expect(page.getByTestId("section-name")).toHaveText(
     "Isosceles triangle",
   );
@@ -600,7 +660,7 @@ test("slices a pyramid from a trapezoid into a triangle at its tip", async ({
 
   // Off the tip: a trapezoid, whose height is not a side, so it is drawn in
   // while the working is shown.
-  await page.getByTestId("input-slice-position").fill("1");
+  await moveSliceTo(page, 1);
   await expect(page.getByTestId("section-name")).toHaveText("Trapezoid");
   expect(await sectionSides(page)).toEqual(["4", "5/3", "5/3", "6"]);
   await expect(page.getByTestId("section-height")).toHaveCount(0);
@@ -617,7 +677,7 @@ test("slices a triangular prism into its right triangle", async ({ page }) => {
   await page.getByTestId("shape-triangularPrism").click();
   await page.getByTestId("view-slice").click();
   // It stands on a rectangle, so a horizontal slice is one.
-  await page.getByTestId("input-slice-position").fill("2");
+  await moveSliceTo(page, 2);
   await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
   expect(await sectionSides(page)).toEqual(["1.5", "1.5", "5", "5"]);
 
@@ -639,7 +699,7 @@ test("slices a sphere into circles, with nowhere to turn", async ({ page }) => {
     "Height above the lowest point",
   );
 
-  await page.getByTestId("input-slice-position").fill("1");
+  await moveSliceTo(page, 1);
   await expect(page.getByTestId("section-name")).toHaveText("Circle");
   await expect(page.getByTestId("section-height-label")).toContainText("r =");
   await expect(page.getByTestId("section-area")).toContainText("5π");
@@ -655,14 +715,14 @@ test("slices a cylinder into an ellipse, or part of one with a rounded area", as
   await expect(page.getByTestId("section-name")).toHaveText("Circle");
 
   await page.getByTestId("slice-diagonal").click();
-  await page.getByTestId("input-slice-position").fill("3");
+  await moveSliceTo(page, 3);
   await expect(page.getByTestId("section-name")).toHaveText("Ellipse");
   await expect(page.getByTestId("section-area")).toContainText("√2π");
   await expect(page.getByTestId("section-beyond-course")).toHaveCount(0);
 
   // A squat cylinder: the cut runs through both disks.
   await page.getByTestId("input-h").fill("1");
-  await page.getByTestId("input-slice-position").fill("1.5");
+  await moveSliceTo(page, 1.5);
   await expect(page.getByTestId("section-name")).toHaveText(
     "Part of an ellipse",
   );
@@ -688,25 +748,25 @@ test("slices a cone into the conics, by how steep it is", async ({ page }) => {
 
   // Straight down through the tip of a cone with radius 3 and height 4.
   await page.getByTestId("slice-vertical").click();
-  await page.getByTestId("input-slice-position").fill("3");
+  await moveSliceTo(page, 3);
   await expect(page.getByTestId("section-name")).toHaveText(
     "Isosceles triangle",
   );
   expect(await sectionSides(page)).toEqual(["5", "5", "6"]);
   // Off the tip, a hyperbola region, with its area rounded.
-  await page.getByTestId("input-slice-position").fill("1");
+  await moveSliceTo(page, 1);
   await expect(page.getByTestId("section-name")).toHaveText("Hyperbola region");
   await expect(page.getByTestId("section-beyond-course")).toBeVisible();
 
   // Steeper than 45°: an ellipse.
   await page.getByTestId("slice-diagonal").click();
-  await page.getByTestId("input-slice-position").fill("6");
+  await moveSliceTo(page, 6);
   await expect(page.getByTestId("section-name")).toHaveText("Ellipse");
 
   // Exactly 45°: a parabola region, whose area Archimedes worked out exactly.
   await page.getByTestId("input-r").fill("2");
   await page.getByTestId("input-h").fill("2");
-  await page.getByTestId("input-slice-position").fill("2");
+  await moveSliceTo(page, 2);
   await expect(page.getByTestId("section-name")).toHaveText("Parabola region");
   await page.getByTestId("section-card").hover();
   await expect(page.getByTestId("section-formula")).toContainText(
@@ -716,7 +776,7 @@ test("slices a cone into the conics, by how steep it is", async ({ page }) => {
 
   // Flatter than 45°: a hyperbola region.
   await page.getByTestId("input-r").fill("4");
-  await page.getByTestId("input-slice-position").fill("5");
+  await moveSliceTo(page, 5);
   await expect(page.getByTestId("section-name")).toHaveText("Hyperbola region");
 });
 
@@ -738,7 +798,7 @@ test("measures the cross section from the keyboard alone", async ({ page }) => {
     "aria-pressed",
     "true",
   );
-  await page.getByTestId("input-slice-position").focus();
+  await sliceHandle(page).focus();
   await expect(page.getByTestId("section-formula")).toContainText("A = lw");
 });
 
@@ -767,24 +827,24 @@ test("keeps the cross section's working, not its area, when answers are hidden",
 test("keeps the slice inside the solid", async ({ page }) => {
   await page.getByTestId("view-slice").click();
 
-  // On the bottom face or the top, the plane only touches the solid.
-  for (const outside of ["0", "5", "7"]) {
-    await page.getByTestId("input-slice-position").fill(outside);
-    await expect(page.getByTestId("error-slice-position")).toContainText(
-      "inside the solid",
-    );
-    await expect(page.getByTestId("section-area")).toContainText("12");
-  }
-  await page.getByTestId("input-slice-position").fill("4.9");
-  await expect(page.getByTestId("error-slice-position")).toHaveCount(0);
+  // On the bottom face or the top, the plane would only touch the solid, so
+  // it stops a tenth short, however far it is dragged.
+  await sliceHandle(page).focus();
+  await sliceHandle(page).press("Home");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "0.1");
+  await sliceHandle(page).press("ArrowDown");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "0.1");
+  await dragSlice(page, 0, -2000);
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "4.9");
+  await expect(page.getByTestId("section-area")).toContainText("12");
 
   // A smaller solid pulls the plane back inside it.
   await page.getByTestId("shape-cube").click();
-  await expect(page.getByTestId("input-slice-position")).toHaveValue("1.9");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "1.9");
   await expect(page.getByTestId("section-name")).toHaveText("Square");
   await expect(page.getByTestId("section-area")).toContainText("4");
   await page.getByTestId("input-s").fill("1");
-  await expect(page.getByTestId("input-slice-position")).toHaveValue("0.9");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "0.9");
 });
 
 test("offers no slice of the logo, and says why", async ({ page }) => {
@@ -833,7 +893,7 @@ test("keeps the slice and the cross section in view on a narrow screen", async (
   await page.getByTestId("view-slice").click();
 
   await expect(page.getByTestId("section-name")).toBeInViewport();
-  await expect(page.getByTestId("input-slice-position")).toBeVisible();
+  await expect(sliceHandle(page)).toBeInViewport();
   const overflow = await page.evaluate(
     () =>
       document.documentElement.scrollWidth -
@@ -847,20 +907,21 @@ test("floats the slice over other tabs and brings it back", async ({
   context,
 }) => {
   await page.getByTestId("view-slice").click();
-  await page.getByTestId("input-slice-position").fill("1.5");
+  await moveSliceTo(page, 1.5);
 
   const floatingPagePromise = context.waitForEvent("page");
   await page.getByTestId("toggle-float").click();
   const floatingPage = await floatingPagePromise;
   await expect(floatingPage.getByTestId("section-view")).toBeVisible();
-  await expect(floatingPage.getByTestId("input-slice-position")).toHaveValue(
+  await expect(sliceHandle(floatingPage)).toHaveAttribute(
+    "aria-valuenow",
     "1.5",
   );
-  await floatingPage.getByTestId("input-slice-position").fill("3");
+  await moveSliceTo(floatingPage, 3);
 
   await floatingPage.close();
   await expect(page.getByTestId("section-view")).toBeVisible();
-  await expect(page.getByTestId("input-slice-position")).toHaveValue("3");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "3");
 });
 
 test("folds the solid out into its net and back, from the pose it was left in", async ({

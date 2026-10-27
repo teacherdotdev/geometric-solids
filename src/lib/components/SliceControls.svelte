@@ -1,37 +1,19 @@
 <script lang="ts">
   /**
-   * Where the cutting plane goes: which way it faces — horizontal, vertical or
-   * diagonal, turned a quarter at a time — and how far through the solid it is.
-   * One axis: the position slider moves the plane through the solid, measured
-   * from where it first touches it.
+   * Which way the cutting plane faces: horizontal, vertical or diagonal,
+   * turned a quarter at a time, and what its position measures. The plane is
+   * moved by the arrow drawn on it in the solid view.
    */
-  import NumberField from "$lib/components/NumberField.svelte";
   import {
     SLICE_DIRECTIONS,
     SLICE_HEADINGS,
     type SliceDirection,
     type SliceHeading,
   } from "$lib/domain/crossSections";
-  import { DIMENSION_STEP } from "$lib/domain/types";
-  import { t, unitLabels, validationMessage } from "$lib/i18n/index.svelte";
+  import { slicePositionLabel, t } from "$lib/i18n/index.svelte";
   import type { LabState } from "$lib/state/lab.svelte";
-  import { toNumber } from "$lib/domain/rational";
 
-  let {
-    lab,
-    compact = false,
-  }: {
-    lab: LabState;
-    compact?: boolean;
-  } = $props();
-
-  const linear = $derived(unitLabels(lab.unit).linear);
-  const span = $derived(lab.sliceSpan ? toNumber(lab.sliceSpan) : 0);
-  /** The first and last tenth strictly inside the solid. */
-  const lowest = DIMENSION_STEP;
-  const highest = $derived(
-    Math.max(lowest, Math.ceil(span * 10 - 1e-9) / 10 - DIMENSION_STEP),
-  );
+  let { lab }: { lab: LabState } = $props();
 
   const directionNames: Record<SliceDirection, () => string> = {
     horizontal: () => t("slice.horizontal"),
@@ -60,15 +42,7 @@
     "cursor-pointer rounded-lg px-2 py-1 text-xs font-bold transition";
 
   const label = $derived(
-    round
-      ? t("slice.position.sphere")
-      : lab.sliceDirection === "diagonal"
-        ? t("slice.position.diagonal")
-        : lab.sliceHeading === "frontToBack"
-          ? t("slice.position.frontToBack")
-          : lab.sliceHeading === "sideToSide"
-            ? t("slice.position.sideToSide")
-            : t("slice.position.level"),
+    slicePositionLabel(lab.kind, lab.sliceDirection, lab.sliceHeading),
   );
 </script>
 
@@ -134,37 +108,7 @@
       {/if}
     </div>
   {/if}
-  <p class="text-xs font-bold text-ink-soft">{label}</p>
-  <div class="flex items-center gap-1.5">
-    <NumberField
-      id="slice-position"
-      testKey="slice-position"
-      {label}
-      unit={linear}
-      value={lab.slicePosition ?? span / 2}
-      draft={lab.sliceDraft}
-      error={lab.sliceError}
-      step={DIMENSION_STEP}
-      {lowest}
-      {highest}
-      sliderMax={highest}
-      {compact}
-      onDraft={(raw) => lab.setSliceDraft(raw)}
-      onNudge={(delta) => lab.nudgeSlice(delta)}
-    />
-  </div>
-  {#if lab.sliceError}
-    <p
-      id="error-slice-position"
-      data-testid="error-slice-position"
-      role="alert"
-      class="max-w-[17rem] rounded bg-flag-soft px-2 py-1 text-xs font-semibold text-flag"
-    >
-      {t("measure.still", {
-        message: validationMessage(lab.sliceError),
-        value: lab.slicePosition ?? span / 2,
-        unit: linear,
-      })}
-    </p>
-  {/if}
+  <p class="text-xs font-bold text-ink-soft" data-testid="slice-measure">
+    {label}
+  </p>
 </div>

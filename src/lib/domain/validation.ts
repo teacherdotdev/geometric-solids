@@ -6,8 +6,6 @@ export type DimensionParse =
 
 export const RANGE_MESSAGE = `Enter a number from ${DIMENSION_MIN} to ${DIMENSION_TYPED_MAX}`;
 export const STEP_MESSAGE = `Use steps of ${DIMENSION_STEP}, for example 2.5`;
-/** A slice position has to cut the solid, not stand on its edge or miss it. */
-export const SLICE_OUTSIDE_MESSAGE = "Enter a position inside the solid";
 
 /**
  * Parse a dimension draft. Invalid drafts are rejected outright rather than

@@ -1,11 +1,9 @@
 import { browser } from "$app/environment";
+import type { SliceDirection, SliceHeading } from "$lib/domain/crossSections";
 import type { UnitKey, UnitLabels } from "$lib/domain/format";
+import type { SolidKind } from "$lib/domain/types";
 import { CUBE_EDGE_MESSAGE } from "$lib/domain/unitCubes";
-import {
-  RANGE_MESSAGE,
-  SLICE_OUTSIDE_MESSAGE,
-  STEP_MESSAGE,
-} from "$lib/domain/validation";
+import { RANGE_MESSAGE, STEP_MESSAGE } from "$lib/domain/validation";
 
 export type LanguageCode = "en" | "es" | "fr";
 
@@ -65,6 +63,7 @@ const en = {
     "slice.position.frontToBack": "Distance in from the left side",
     "slice.position.sideToSide": "Distance in from the back",
     "slice.position.diagonal": "Height risen from where it first touches",
+    "slice.handle": "Drag to move the slice. {label}",
     "slice.drawing":
       "The cross section, seen face-on: {name}, with sides {sides} {unit}.",
     "slice.hiddenName": "shape hidden",
@@ -81,7 +80,6 @@ const en = {
     "validation.number": "Enter a number",
     "validation.range": "Enter a number from 0.1 to 100000",
     "validation.step": "Use steps of 0.1, for example 2.5",
-    "validation.slice": "Enter a position inside the solid",
     "validation.cubes": "Unit cubes need a whole number from 1 to 10",
     "totals.label": "Totals",
     "totals.hidden": "hidden",
@@ -265,6 +263,7 @@ const es = {
     "slice.position.frontToBack": "Distancia desde el lado izquierdo",
     "slice.position.sideToSide": "Distancia desde atrás",
     "slice.position.diagonal": "Altura subida desde donde toca por primera vez",
+    "slice.handle": "Arrastra para mover el corte. {label}",
     "slice.drawing":
       "La sección transversal, vista de frente: {name}, con lados {sides} {unit}.",
     "slice.hiddenName": "figura oculta",
@@ -281,7 +280,6 @@ const es = {
     "validation.number": "Introduce un número",
     "validation.range": "Introduce un número entre 0.1 y 100000",
     "validation.step": "Usa incrementos de 0.1; por ejemplo, 2.5",
-    "validation.slice": "Escribe una posición dentro del sólido",
     "validation.cubes":
       "Los cubos unitarios necesitan un número entero del 1 al 10",
     "totals.label": "Totales",
@@ -560,6 +558,7 @@ const fr = {
     "slice.position.frontToBack": "Distance depuis le côté gauche",
     "slice.position.sideToSide": "Distance depuis l’arrière",
     "slice.position.diagonal": "Hauteur montée depuis le premier contact",
+    "slice.handle": "Faites glisser pour déplacer la coupe. {label}",
     "slice.drawing":
       "La section, vue de face : {name}, de côtés {sides} {unit}.",
     "slice.hiddenName": "figure masquée",
@@ -576,7 +575,6 @@ const fr = {
     "validation.number": "Saisissez un nombre",
     "validation.range": "Saisissez un nombre compris entre 0.1 et 100000",
     "validation.step": "Utilisez des pas de 0.1, par exemple 2.5",
-    "validation.slice": "Saisissez une position à l’intérieur du solide",
     "validation.cubes": "Les cubes unités demandent un nombre entier de 1 à 10",
     "totals.label": "Totaux",
     "totals.hidden": "masqué",
@@ -865,11 +863,23 @@ export function unitLabels(key: UnitKey): UnitLabels {
   return current().units[key] ?? en.units[key];
 }
 
+/** What the slice position measures, for a solid sliced the way it is. */
+export function slicePositionLabel(
+  kind: SolidKind,
+  direction: SliceDirection,
+  heading: SliceHeading,
+): string {
+  if (kind === "sphere") return t("slice.position.sphere");
+  if (direction === "diagonal") return t("slice.position.diagonal");
+  if (heading === "frontToBack") return t("slice.position.frontToBack");
+  if (heading === "sideToSide") return t("slice.position.sideToSide");
+  return t("slice.position.level");
+}
+
 export function validationMessage(message: string): string {
   if (message === RANGE_MESSAGE) return t("validation.range");
   if (message === STEP_MESSAGE) return t("validation.step");
   if (message === CUBE_EDGE_MESSAGE) return t("validation.cubes");
-  if (message === SLICE_OUTSIDE_MESSAGE) return t("validation.slice");
   if (message === "Enter a number") return t("validation.number");
   return message;
 }

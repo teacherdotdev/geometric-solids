@@ -352,7 +352,7 @@
         use:measureBox={(width) => (middleWidth = width)}
       >
         {#if lab.view === "slice" && lab.section}
-          <SliceControls {lab} compact={floating} />
+          <SliceControls {lab} />
         {/if}
         <RotationControls {lab} {reducedMotion} compact={floating} />
       </div>

@@ -20,7 +20,7 @@ import { type Exact, exactRational } from "$lib/domain/exact";
 import { type UnitKey } from "$lib/domain/format";
 import { buildEdges, buildMesh } from "$lib/domain/geometry3d";
 import { buildNet } from "$lib/domain/nets";
-import { fromTenths, mul, rational, toNumber } from "$lib/domain/rational";
+import { fromTenths, mul, rational } from "$lib/domain/rational";
 import {
   SOLIDS,
   buildSolid,
@@ -37,12 +37,7 @@ import {
   toCubeEdge,
   type CubeRun,
 } from "$lib/domain/unitCubes";
-import {
-  RANGE_MESSAGE,
-  SLICE_OUTSIDE_MESSAGE,
-  dimensionToDraft,
-  parseDimension,
-} from "$lib/domain/validation";
+import { dimensionToDraft, parseDimension } from "$lib/domain/validation";
 import { surfaceHue } from "$lib/ui/colors";
 
 export type { ViewMode };
@@ -133,8 +128,6 @@ export class LabState {
    * to hold any tenth strictly inside it.
    */
   slicePosition = $state<number | null>(null);
-  sliceDraft = $state("");
-  sliceError = $state<string | null>(null);
 
   definition = $derived(SOLIDS[this.kind]);
   dimensions = $derived(this.dimensionsByKind[this.kind]);
@@ -313,48 +306,17 @@ export class LabState {
       this.slicePosition === null
         ? middleOfSpan(span)
         : clampToSpan(this.slicePosition, span);
-    this.sliceDraft =
-      this.slicePosition === null
-        ? String(toNumber(span) / 2)
-        : dimensionToDraft(this.slicePosition);
-    this.sliceError = null;
   }
 
-  /** Apply a typed or dragged slice position, if it is inside the solid. */
-  setSliceDraft(raw: string) {
-    this.sliceDraft = raw;
-    const span = this.sliceSpan;
-    if (!span) return;
-    const parsed = parseDimension(raw);
-    // A number past either end is outside the solid, whatever the dimension
-    // inputs would make of it.
-    if (!parsed.ok) {
-      this.sliceError =
-        parsed.message === RANGE_MESSAGE && /^\d*\.?\d+$/.test(raw.trim())
-          ? SLICE_OUTSIDE_MESSAGE
-          : parsed.message;
-      return;
-    }
-    if (!insideSpan(fromTenths(parsed.value), span)) {
-      this.sliceError = SLICE_OUTSIDE_MESSAGE;
-      return;
-    }
-    this.sliceError = null;
-    this.slicePosition = parsed.value;
-  }
-
-  /** Step the slice position by whole increments, stopping inside the solid. */
-  nudgeSlice(delta: number) {
+  /**
+   * Move the cutting plane as near to a position as it can go: onto the
+   * nearest tenth, stopping just inside the solid at either end.
+   */
+  moveSlice(position: number) {
     const span = this.sliceSpan;
     if (!span || this.slicePosition === null) return;
-    const next = clampToSpan(
-      Math.round((this.slicePosition + delta) * 10) / 10,
-      span,
-    );
-    if (next === null) return;
-    this.slicePosition = next;
-    this.sliceDraft = dimensionToDraft(next);
-    this.sliceError = null;
+    const next = clampToSpan(position, span);
+    if (next !== null) this.slicePosition = next;
   }
 
   /** Choose a slice direction, facing the first of its headings. */

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Floor from "$lib/components/Floor.svelte";
   import MathText from "$lib/components/MathText.svelte";
+  import { clampToSpan } from "$lib/domain/crossSections";
   import { evalExact, formatExact } from "$lib/domain/exact";
   import { approximateText, formatApproximate } from "$lib/domain/format";
   import {
@@ -12,7 +13,12 @@
     type Vec3,
   } from "$lib/domain/geometry3d";
   import { DIMENSION_MAX } from "$lib/domain/types";
-  import { domainText, t, unitLabels } from "$lib/i18n/index.svelte";
+  import {
+    domainText,
+    slicePositionLabel,
+    t,
+    unitLabels,
+  } from "$lib/i18n/index.svelte";
   import {
     measureTarget,
     sectionTarget,
@@ -264,11 +270,35 @@
   const slicing = $derived.by(() => {
     if (!section) return null;
     const { origin, across, up } = section.plane;
-    const reachOut = lab.mesh.extent * 1.35;
+    // The sheet and its arrow hang where the plane crosses the line through
+    // the middle of the solid along the way it moves, not on the middle of
+    // the cut: that shifts sideways as the cut changes shape, which would
+    // make a diagonal slice look as if it slid along its slope rather than
+    // rising straight up.
+    const normal: Vec3 = [
+      across[1] * up[2] - across[2] * up[1],
+      across[2] * up[0] - across[0] * up[2],
+      across[0] * up[1] - across[1] * up[0],
+    ];
+    const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const crossing = dot(normal, origin) / dot(normal, section.slide);
+    const anchor: Vec3 = [
+      section.slide[0] * crossing,
+      section.slide[1] * crossing,
+      section.slide[2] * crossing,
+    ];
+    // Wide enough to run right through the solid from wherever it hangs.
+    const reachOut =
+      lab.mesh.extent * 1.35 +
+      Math.hypot(
+        anchor[0] - origin[0],
+        anchor[1] - origin[1],
+        anchor[2] - origin[2],
+      );
     const corner = (i: number, j: number): Vec3 => [
-      origin[0] + (across[0] * i + up[0] * j) * reachOut,
-      origin[1] + (across[1] * i + up[1] * j) * reachOut,
-      origin[2] + (across[2] * i + up[2] * j) * reachOut,
+      anchor[0] + (across[0] * i + up[0] * j) * reachOut,
+      anchor[1] + (across[1] * i + up[1] * j) * reachOut,
+      anchor[2] + (across[2] * i + up[2] * j) * reachOut,
     ];
     const at = (point: Vec3) =>
       projectPoint(rotatePoint(point, lab.yaw, lab.pitch), scale);
@@ -321,7 +351,25 @@
       };
     }
 
+    // The arrow that moves the plane, pointing the way it moves, so it only
+    // ever travels along itself. Seen almost end-on that way is too short on
+    // screen to drag along at the pointer's pace, so a drag there takes more
+    // pixels.
+    const middle = at(anchor);
+    const ahead = at(along(anchor, section.slide, 1));
+    const step = [ahead[0] - middle[0], ahead[1] - middle[1]];
+    const length = Math.hypot(step[0], step[1]);
+    const direction: [number, number] =
+      length < 1e-6 ? [0, -1] : [step[0] / length, step[1] / length];
+    const handle = {
+      at: middle,
+      direction,
+      pixelsPerUnit: Math.max(length, scale * 0.35),
+      degrees: (Math.atan2(direction[1], direction[0]) * 180) / Math.PI,
+    };
+
     return {
+      handle,
       sheet: projectAll([
         corner(-1, -1),
         corner(1, -1),
@@ -585,6 +633,63 @@
       return;
     }
     if (pressed) lab.togglePin(pressed);
+  }
+
+  /** A drag of the slice's arrow: where it started, and the position then. */
+  let sliding = $state<{ x: number; y: number; from: number } | null>(null);
+
+  function onHandleDown(event: PointerEvent) {
+    if (event.button !== 0 || lab.slicePosition === null) return;
+    event.preventDefault();
+    sliding = { x: event.clientX, y: event.clientY, from: lab.slicePosition };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  function onHandleMove(event: PointerEvent) {
+    if (!sliding || !slicing) return;
+    // Only the part of the drag along the arrow moves the plane.
+    const { direction, pixelsPerUnit } = slicing.handle;
+    const along =
+      (event.clientX - sliding.x) * direction[0] +
+      (event.clientY - sliding.y) * direction[1];
+    lab.moveSlice(sliding.from + along / pixelsPerUnit);
+  }
+
+  function onHandleUp(event: PointerEvent) {
+    sliding = null;
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId))
+      target.releasePointerCapture(event.pointerId);
+  }
+
+  /** The first and last tenth the plane can stop on, strictly inside. */
+  const sliceEnds = $derived.by(() => {
+    const span = lab.sliceSpan;
+    if (!span) return null;
+    return {
+      lowest: clampToSpan(0, span),
+      highest: clampToSpan(Infinity, span),
+    };
+  });
+
+  function onHandleKey(event: KeyboardEvent) {
+    if (lab.slicePosition === null || !sliceEnds) return;
+    const steps: Record<string, number> = {
+      ArrowUp: 0.1,
+      ArrowRight: 0.1,
+      ArrowDown: -0.1,
+      ArrowLeft: -0.1,
+      PageUp: 1,
+      PageDown: -1,
+    };
+    let next: number | null = null;
+    if (event.key in steps)
+      next = Math.round((lab.slicePosition + steps[event.key]) * 10) / 10;
+    else if (event.key === "Home") next = sliceEnds.lowest;
+    else if (event.key === "End") next = sliceEnds.highest;
+    if (next === null) return;
+    event.preventDefault();
+    lab.moveSlice(next);
   }
 
   const STEP = 0.18;
@@ -1033,5 +1138,60 @@
         {/if}
       </button>
     {/each}
+
+    {#if slicing && lab.slicePosition !== null && sliceEnds}
+      <!-- Dragged along the arrow, the plane moves through the solid; the arrow
+           keys move it a tenth at a time. Last, so no badge can cover it. -->
+      <div
+        role="slider"
+        tabindex="0"
+        aria-label={t("slice.handle", {
+          label: slicePositionLabel(
+            lab.kind,
+            lab.sliceDirection,
+            lab.sliceHeading,
+          ),
+        })}
+        aria-valuemin={sliceEnds.lowest}
+        aria-valuemax={sliceEnds.highest}
+        aria-valuenow={lab.slicePosition}
+        aria-valuetext="{lab.slicePosition} {linear}"
+        data-testid="slice-handle"
+        class="pointer-events-auto absolute h-16 w-16 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full focus-visible:outline-2 focus-visible:outline-accent"
+        class:cursor-grab={!sliding}
+        class:cursor-grabbing={sliding}
+        style:left="{halfWidth + slicing.handle.at[0]}px"
+        style:top="{centerY + slicing.handle.at[1]}px"
+        onpointerdown={onHandleDown}
+        onpointermove={onHandleMove}
+        onpointerup={onHandleUp}
+        onpointercancel={onHandleUp}
+        onkeydown={onHandleKey}
+      >
+        <svg
+          class="h-full w-full overflow-visible"
+          viewBox="-32 -32 64 64"
+          aria-hidden="true"
+        >
+          <g
+            transform="rotate({slicing.handle.degrees})"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          >
+            <g stroke="white" stroke-width="6" fill="white" opacity="0.9">
+              <line x1="-20" y1="0" x2="20" y2="0" />
+              <polygon points="30,0 18,-9 18,9" />
+              <polygon points="-30,0 -18,-9 -18,9" />
+            </g>
+            <g stroke="#7c2d12" stroke-width="3" fill="#7c2d12">
+              <line x1="-20" y1="0" x2="20" y2="0" />
+              <polygon points="28,0 19,-7 19,7" stroke-width="1.5" />
+              <polygon points="-28,0 -19,-7 -19,7" stroke-width="1.5" />
+            </g>
+            <circle r="7" fill="#f59e0b" stroke="#7c2d12" stroke-width="2.5" />
+          </g>
+        </svg>
+      </div>
+    {/if}
   </div>
 </div>
