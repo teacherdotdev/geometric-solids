@@ -67,10 +67,11 @@ export interface Slice {
   readonly direction: SliceDirection;
   readonly heading: SliceHeading;
   /**
-   * How far the plane has moved along its one axis from where it first
-   * touches the solid: height above the bottom face, distance in from the left
-   * or the back, or, for a diagonal, how far it has risen straight up from the
-   * bottom edge it first touches.
+   * Where the plane is along its one axis: height above the bottom face,
+   * distance in from the left or the back, or, for a diagonal, the height
+   * above the bottom face at which it crosses the line up the middle of the
+   * solid. That crossing starts below the bottom face, so a diagonal's
+   * position starts below 0.
    */
   readonly position: Rational;
 }
@@ -183,8 +184,10 @@ export interface CrossSection {
     readonly up: Vec3;
   };
   /**
-   * What the slice position measures, drawn on the solid: from the middle of
-   * what the plane touches first, along its one axis, to the plane as it is.
+   * What the slice position measures, drawn on the solid along the line
+   * through its middle the way the plane moves, where the plane's arrow is:
+   * from where the plane crossed that line as it first touched the solid, to
+   * where it crosses it now.
    */
   readonly travel: { readonly from3d: Vec3; readonly to3d: Vec3 };
   /** The unit direction the plane moves in as the position grows. */
@@ -412,44 +415,112 @@ function reach(solid: Polyhedron, normal: IVec3): [Rational, Rational] {
   return [low, high];
 }
 
+/** The positions a plane can take: those strictly between low and high. */
+export interface SliceRange {
+  /** Where the plane first touches the solid. */
+  readonly low: Rational;
+  /** Where it last touches it. */
+  readonly high: Rational;
+}
+
 /**
- * How far the plane can move through the solid: positions strictly between 0
- * and this. Null for a solid that cannot be sliced.
+ * Where a polyhedron's plane is as it first touches the solid: how far along
+ * the way it moves it then crosses the line through the solid's middle, past
+ * the solid's own lowest that way. Level and vertical planes cross that line
+ * square on, so this is 0; a diagonal first touches at an edge out to one
+ * side, and crosses the middle below the bottom face.
  */
-export function sliceSpan(
+function polyhedronLow(
+  solid: Polyhedron,
+  frame: PlaneFrame,
+  [low, high]: [Rational, Rational],
+): Rational {
+  const start = slidesForward(frame) ? low : high;
+  // The plane meets the line centre + t·slide where n·centre + t(n·slide) is
+  // its c, and n·slide is 1 or −1.
+  const [n, slide] = [frame.normal, frame.slide];
+  const t = mul(
+    add(start, mul(dotI(n, solid.centre), rational(-1))),
+    rational(n[0] * slide[0] + n[1] * slide[1] + n[2] * slide[2]),
+  );
+  const [lowest] = reach(solid, slide);
+  return add(add(dotI(slide, solid.centre), t), mul(lowest, rational(-1)));
+}
+
+/**
+ * Where a round solid's plane is as it first touches it. A diagonal starts at
+ * the foot of the rim, a radius out from the middle, which it crosses a
+ * radius below the bottom face.
+ */
+function roundLow(
   kind: SolidKind,
   d: Dimensions,
   heading: SliceHeading,
-): Rational | null {
-  const solid = polyhedronOf(kind, d);
-  if (!solid) return roundSpan(kind, d, heading);
-  const [low, high] = reach(solid, FRAMES[heading].normal);
-  return add(high, mul(low, rational(-1)));
-}
-
-/** True when a position lies strictly inside the span. */
-export function insideSpan(position: Rational, span: Rational): boolean {
-  return compare(position, ZERO) > 0 && compare(position, span) < 0;
+): Rational {
+  const diagonal = !["level", "frontToBack", "sideToSide"].includes(heading);
+  return kind !== "sphere" && diagonal ? mul(r(d, "r"), rational(-1)) : ZERO;
 }
 
 /**
- * The nearest position on a tenth that lies strictly inside the span, or null
- * when the span is too thin to hold one.
+ * How far the plane can move through the solid. Null for a solid that cannot
+ * be sliced.
  */
-export function clampToSpan(position: number, span: Rational): number | null {
-  const tenths = toNumber(span) * 10;
-  // The largest whole number of tenths strictly below the span.
-  const top = Number.isInteger(Math.round(tenths * 1e6) / 1e6)
-    ? Math.round(tenths) - 1
-    : Math.floor(tenths);
-  if (top < 1) return null;
+export function sliceRange(
+  kind: SolidKind,
+  d: Dimensions,
+  heading: SliceHeading,
+): SliceRange | null {
+  const solid = polyhedronOf(kind, d);
+  if (!solid) {
+    const span = roundSpan(kind, d, heading);
+    if (!span) return null;
+    const low = roundLow(kind, d, heading);
+    return { low, high: add(low, span) };
+  }
+  const frame = FRAMES[heading];
+  const ends = reach(solid, frame.normal);
+  const low = polyhedronLow(solid, frame, ends);
+  return { low, high: add(low, add(ends[1], mul(ends[0], rational(-1)))) };
+}
+
+/** True when a position lies strictly inside the span. */
+function insideSpan(position: Rational, span: Rational): boolean {
+  return compare(position, ZERO) > 0 && compare(position, span) < 0;
+}
+
+/** True when a position lies strictly inside the range. */
+export function insideRange(position: Rational, range: SliceRange): boolean {
+  return compare(position, range.low) > 0 && compare(position, range.high) < 0;
+}
+
+/**
+ * The nearest position on a tenth that lies strictly inside the range, or
+ * null when the range is too thin to hold one.
+ */
+export function clampToRange(
+  position: number,
+  range: SliceRange,
+): number | null {
+  const tenths = (value: Rational) => {
+    const raw = toNumber(value) * 10;
+    const near = Math.round(raw);
+    return Math.abs(raw - near) < 1e-6
+      ? { at: near, whole: true }
+      : { at: raw, whole: false };
+  };
+  // The first and last whole numbers of tenths strictly inside.
+  const low = tenths(range.low);
+  const high = tenths(range.high);
+  const bottom = low.whole ? low.at + 1 : Math.ceil(low.at);
+  const top = high.whole ? high.at - 1 : Math.floor(high.at);
+  if (top < bottom) return null;
   const wanted = Math.round(position * 10);
-  return Math.min(top, Math.max(1, wanted)) / 10;
+  return Math.min(top, Math.max(bottom, wanted)) / 10;
 }
 
 /** Half way through, on a tenth. */
-export function middleOfSpan(span: Rational): number | null {
-  return clampToSpan(toNumber(span) / 2, span);
+export function middleOfRange(range: SliceRange): number | null {
+  return clampToRange((toNumber(range.low) + toNumber(range.high)) / 2, range);
 }
 
 interface Corner {
@@ -596,13 +667,16 @@ export function cutSolid(
   if (!solid) return cutRound(kind, d, slice);
   const frame = FRAMES[slice.heading];
   const [low, high] = reach(solid, frame.normal);
-  if (!insideSpan(slice.position, add(high, mul(low, rational(-1)))))
-    return null;
-  // The c the plane first touches the solid at, and the one it has reached.
-  const start = slidesForward(frame) ? low : high;
+  // How far the plane has moved since it first touched the solid.
+  const moved = add(
+    slice.position,
+    mul(polyhedronLow(solid, frame, [low, high]), rational(-1)),
+  );
+  if (!insideSpan(moved, add(high, mul(low, rational(-1))))) return null;
+  // The c the plane has reached.
   const c = slidesForward(frame)
-    ? add(low, slice.position)
-    : add(high, mul(slice.position, rational(-1)));
+    ? add(low, moved)
+    : add(high, mul(moved, rational(-1)));
   const corners = cornersOf(solid, frame, c);
   if (corners.length < 3) return null;
 
@@ -653,18 +727,6 @@ export function cutSolid(
     const length = Math.hypot(v[0], v[1], v[2]);
     return [v[0] / length, v[1] / length, v[2] / length];
   };
-  // Where the plane first touched the solid: the middle of the face, edge or
-  // corner it met first. The position is measured from there.
-  const touching = solid.vertices.filter((vertex) =>
-    equals(dotI(frame.normal, vertex), start),
-  );
-  const touch: RVec3 = [0, 1, 2].map((i) =>
-    touching.reduce(
-      (sum, vertex) =>
-        add(sum, mul(vertex[i], rational(1n, BigInt(touching.length)))),
-      ZERO,
-    ),
-  ) as unknown as RVec3;
   const shift = (point: RVec3, by: IVec3, times: Rational): RVec3 =>
     point.map((value, i) =>
       add(value, mul(rational(-by[i]), times)),
@@ -686,6 +748,11 @@ export function cutSolid(
           degrees: (flatUp[0] === 0 && flatUp[2] === 0 ? 90 : 45) as 45 | 90,
         };
 
+  const plane = {
+    origin: onSolid(centreAt),
+    across: unit(frame.across),
+    up: unit(frame.up),
+  };
   return {
     shape,
     name: SECTION_NAMES[shape],
@@ -700,17 +767,8 @@ export function cutSolid(
     },
     outline2d: corners.map(flat),
     outline3d: corners.map((p) => onSolid(p.at)),
-    plane: {
-      origin: onSolid(centreAt),
-      across: unit(frame.across),
-      up: unit(frame.up),
-    },
-    travel: {
-      from3d: onSolid(touch),
-      to3d: onSolid(
-        shift(touch, frame.slide, mul(slice.position, rational(-1))),
-      ),
-    },
+    plane,
+    travel: travelOf(plane.origin, frame, toNumber(slice.position)),
     slide: unit(frame.slide),
     angle,
   };
@@ -888,6 +946,23 @@ const plus = (a: F3, b: F3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const times = (a: F3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
 const dotF = (a: F3, b: F3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const unitOf = (v: F3): Vec3 => times(v, 1 / Math.hypot(v[0], v[1], v[2]));
+
+/**
+ * The slice position drawn down the line through the middle of the solid, the
+ * mesh's origin, along the way the plane moves: from where the plane crosses it
+ * now, back as far as the plane has moved.
+ */
+function travelOf(
+  origin: Vec3,
+  frame: PlaneFrame,
+  position: number,
+): CrossSection["travel"] {
+  const crossing = dotF(frame.normal, origin) / dotF(frame.normal, frame.slide);
+  return {
+    from3d: times(frame.slide, crossing - position),
+    to3d: times(frame.slide, crossing),
+  };
+}
 
 /** Bracket a value raised to a power unless it is a plain number. */
 function power(text: string): string {
@@ -1231,32 +1306,6 @@ function roundGeometry(
   return cylinderDiagonal(radius, height, rising, sideways, offset);
 }
 
-/** Where a round solid first meets a plane moving along its normal. */
-function roundTouch(kind: SolidKind, d: Dimensions, normal: F3): Vec3 {
-  const radius = toNumber(r(d, "r"));
-  if (kind === "sphere") return times(unitOf(normal), -radius);
-  if (kind === "cone") {
-    // The tip, or the nearest point of the rim, or the middle of the line
-    // between them when the plane lies along the cone's side.
-    const top = toNumber(r(d, "h")) / 2;
-    const flat: F3 = [normal[0], 0, normal[2]];
-    const level = flat[0] === 0 && flat[2] === 0;
-    const rim: Vec3 = level
-      ? [0, -top, 0]
-      : plus(times(unitOf(flat), -radius), [0, -top, 0]);
-    const tip: Vec3 = [0, top, 0];
-    const [atTip, atRim] = [dotF(normal, tip), dotF(normal, rim)];
-    if (Math.abs(atTip - atRim) < 1e-9) return times(plus(tip, rim), 0.5);
-    return atTip < atRim ? tip : rim;
-  }
-  const flat: F3 = [normal[0], 0, normal[2]];
-  const sideways =
-    flat[0] === 0 && flat[2] === 0 ? [0, 0, 0] : times(unitOf(flat), -radius);
-  const top = toNumber(r(d, "h")) / 2;
-  const y = normal[1] > 0 ? -top : normal[1] < 0 ? top : 0;
-  return [sideways[0], y, sideways[2]];
-}
-
 function cutRound(
   kind: SolidKind,
   d: Dimensions,
@@ -1264,7 +1313,12 @@ function cutRound(
 ): CrossSection | null {
   const heading = kind === "sphere" ? "level" : slice.heading;
   const span = roundSpan(kind, d, heading);
-  if (!span || !insideSpan(slice.position, span)) return null;
+  // How far the plane has moved since it first touched the solid.
+  const moved = add(
+    slice.position,
+    mul(roundLow(kind, d, heading), rational(-1)),
+  );
+  if (!span || !insideSpan(moved, span)) return null;
   const frame = FRAMES[heading];
   // The geometry below measures c up from its lowest; a diagonal sliding up
   // starts from its highest instead.
@@ -1273,18 +1327,13 @@ function cutRound(
     kind,
     d,
     heading,
-    forward ? slice.position : add(span, mul(slice.position, rational(-1))),
+    forward ? moved : add(span, mul(moved, rational(-1))),
   );
   if (!geometry) return null;
   const across = unitOf(frame.across);
   const up = unitOf(frame.up);
   const flat = (point: Vec3): Point2 => [dotF(point, across), dotF(point, up)];
 
-  const touch = roundTouch(
-    kind,
-    d,
-    forward ? frame.normal : times(frame.normal, -1),
-  );
   const bottom =
     kind === "sphere" ? -toNumber(r(d, "r")) : -toNumber(r(d, "h")) / 2;
   const centre = geometry.centre;
@@ -1316,10 +1365,7 @@ function cutRound(
     outline2d: geometry.outline.map(flat),
     outline3d: geometry.outline,
     plane: { origin: centre, across, up },
-    travel: {
-      from3d: touch,
-      to3d: plus(touch, times(frame.slide, toNumber(slice.position))),
-    },
+    travel: travelOf(centre, frame, toNumber(slice.position)),
     slide: unitOf(frame.slide),
     angle:
       heading === "level"
@@ -1435,8 +1481,14 @@ function coneGeometry(
         mul(mul(radius, radius), rational(4)),
         add(mul(radius, radius), mul(height, height)),
       );
+      // As tall as it is wide at the base, the sides meet square at the tip.
+      const right = equals(radius, height);
       return {
-        shape: equilateral ? "equilateralTriangle" : "isoscelesTriangle",
+        shape: equilateral
+          ? "equilateralTriangle"
+          : right
+            ? "rightIsoscelesTriangle"
+            : "isoscelesTriangle",
         outline: corners,
         edges: [
           { from: corners[0], to: corners[1], length: base },

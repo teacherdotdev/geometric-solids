@@ -60,7 +60,7 @@ const en = {
     "slice.position.level": "Height above the bottom face",
     "slice.position.frontToBack": "Distance in from the left side",
     "slice.position.sideToSide": "Distance in from the back",
-    "slice.position.diagonal": "Height risen from where it first touches",
+    "slice.position.diagonal": "Height above the bottom face, at the middle",
     "slice.handle": "Drag to move the slice. {label}",
     "slice.drawing":
       "The cross section, seen face-on: {name}, with sides {sides} {unit}.",
@@ -258,7 +258,7 @@ const es = {
     "slice.position.level": "Altura sobre la cara inferior",
     "slice.position.frontToBack": "Distancia desde el lado izquierdo",
     "slice.position.sideToSide": "Distancia desde atrás",
-    "slice.position.diagonal": "Altura subida desde donde toca por primera vez",
+    "slice.position.diagonal": "Altura sobre la cara inferior, en el centro",
     "slice.handle": "Arrastra para mover el corte. {label}",
     "slice.drawing":
       "La sección transversal, vista de frente: {name}, con lados {sides} {unit}.",
@@ -551,7 +551,7 @@ const fr = {
     "slice.position.level": "Hauteur au-dessus de la face du bas",
     "slice.position.frontToBack": "Distance depuis le côté gauche",
     "slice.position.sideToSide": "Distance depuis l’arrière",
-    "slice.position.diagonal": "Hauteur montée depuis le premier contact",
+    "slice.position.diagonal": "Hauteur au-dessus de la face du bas, au centre",
     "slice.handle": "Faites glisser pour déplacer la coupe. {label}",
     "slice.drawing":
       "La section, vue de face : {name}, de côtés {sides} {unit}.",

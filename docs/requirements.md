@@ -106,10 +106,10 @@ perpendicular to it, or at a diagonal.
 - A double-headed **arrow** at the middle of the cross section moves the cutting plane along one axis, in the solid's units and steps of 0.1. Dragging it moves the plane along the arrow, at the pace of the pointer; only the part of a drag along the arrow counts, so dragging the arrow never turns the solid. It is a focusable slider: the arrow keys step it by 0.1, Page Up and Page Down by 1, Home and End to either end. There is no other slider or typed entry for the position. What it measures is part of the arrow's accessible name:
   - Horizontal: height above the bottom face.
   - Vertical: distance in from the side.
-  - Diagonal: the plane moves straight up and down, so the arrow points up. The position is how far it has risen from where it first touches the solid: the bottom edge, or the foot of the rim, on the side it rises toward.
+  - Diagonal: the plane moves straight up and down, so the arrow points up. The position is the height above the bottom face at which the plane crosses the line up the middle of the solid, where the arrow is: 0 where that crossing is on the ground. The plane first touches the solid at the bottom edge, or the foot of the rim, on the side it rises toward, and then crosses the middle below the bottom face, so a diagonal's position starts below 0: half the side for a cube, minus the radius for a cylinder or cone.
   - Sphere: height above its lowest point.
 
-  The position is drawn on the solid as a measured line, and the 90° or 45° angle between the cutting plane and the bottom face is marked.
+  The position is drawn on the solid as a measured line along the arrow, through the middle of the solid: from the bottom face (or the left or back side) to the arrow. Below 0 it runs down from the bottom face to the arrow under it. The 90° or 45° angle between the cutting plane and the bottom face is marked.
 - The arrow stops just short of both ends, where the plane would only touch the solid at a point, an edge or a face, so there is always a real cross section. Changing direction, heading, solid or dimensions keeps the position, pulled back into range when it no longer fits. Slice opens on Horizontal at half height.
 - On the solid, the cutting plane is drawn see-through and the cross section is outlined where it meets the surface. The solid is not cut apart. Drag, keyboard rotation and reset work as in the Solid view and the plane turns with the solid; auto-rotation is turned off.
 - The solid and its plane keep the stage, moved over to the left. The **cross-section drawing** is a round window beside it at the right edge, in the band between the view controls and the panels along the bottom, sized to fit it on a phone as in the floating window. The drawing is the cross section seen face-on, at exactly the solid's scale and on the same grid, so one key to the grid serves both and a slice near a tip comes out small. The window is made big enough to hold the solid's whole extent at that scale, so every cut fits in it; the solid and the window are fitted together to the width and the band.
@@ -159,9 +159,9 @@ perpendicular to it, or at a diagonal.
 - A square pyramid with base side 6 and height 4, sliced horizontally at height 2, gives a 3 × 3 square of area 9.
 - The same pyramid sliced vertically 3 in from the side, through its tip, gives an isosceles triangle with sides 6, 5 and 5, height 4 and area 12; 1 in from the side it gives a trapezoid with parallel sides 6 and 4, height 4/3 and area 20/3.
 - A 3 × 4 × 5 rectangular prism sliced horizontally at any height gives a rectangle equal to its bottom face.
-- A cube with side 2 sliced diagonally through opposite edges (position 2) gives a 2 × 2√2 rectangle of area 4√2 ≈ 5.66.
+- A cube with side 2 sliced diagonally through opposite edges (position 1) gives a 2 × 2√2 rectangle of area 4√2 ≈ 5.66.
 - A right-triangular prism with legs 3 and 4 and length 5, sliced across its length, gives a right triangle with sides 3, 4 and 5 and area 6; sliced horizontally at height 2 it gives a 1.5 × 5 rectangle of area 7.5.
-- A cylinder with radius 1 and height 4 sliced diagonally through its centre (position 3) gives an ellipse with axes 2 and 2√2 and area √2π ≈ 4.44. A cylinder with radius 2 and height 3 sliced diagonally through its centre gives part of an ellipse, with an approximate area only.
+- A cylinder with radius 1 and height 4 sliced diagonally through its centre (position 2) gives an ellipse with axes 2 and 2√2 and area √2π ≈ 4.44. A cylinder with radius 2 and height 3 sliced diagonally through its centre gives part of an ellipse, with an approximate area only.
 - A sphere with radius 3 sliced at height 1 gives a circle of radius √5 and area 5π ≈ 15.71.
 - With answers hidden, the Slice view shows the cross section's side lengths and formula but not its name or evaluated area.
 - Every essential action can be performed without a mouse.

@@ -10,17 +10,17 @@ import {
   type SliceDirection,
   type SliceHeading,
   SLICE_HEADINGS,
-  clampToSpan,
+  clampToRange,
   cutSolid,
-  insideSpan,
-  middleOfSpan,
-  sliceSpan,
+  insideRange,
+  middleOfRange,
+  sliceRange,
 } from "$lib/domain/crossSections";
 import { type Exact, exactRational } from "$lib/domain/exact";
 import { type UnitKey } from "$lib/domain/format";
 import { buildEdges, buildMesh } from "$lib/domain/geometry3d";
 import { buildNet } from "$lib/domain/nets";
-import { fromTenths, mul, rational } from "$lib/domain/rational";
+import { add, fromTenths, mul, rational } from "$lib/domain/rational";
 import {
   SOLIDS,
   buildSolid,
@@ -137,21 +137,23 @@ export class LabState {
   /** The solid in unit cubes, or null for one that cubes cannot fill. */
   cubes = $derived(cubeBox(this.kind, this.dimensionsByKind[this.kind]));
   cubeTotal = $derived(this.cubes ? cubeCount(this.cubes) : 0);
-  /** How far the cutting plane can move: positions strictly between 0 and this. */
-  sliceSpan = $derived(
-    sliceSpan(this.kind, this.dimensionsByKind[this.kind], this.sliceHeading),
+  /** How far the cutting plane can move: positions strictly inside this. */
+  sliceRange = $derived(
+    sliceRange(this.kind, this.dimensionsByKind[this.kind], this.sliceHeading),
   );
   /**
    * The cross section on screen, or null for a solid that cannot be sliced. A
    * solid too thin to hold a tenth strictly inside it is cut through its middle.
    */
   section = $derived.by<CrossSection | null>(() => {
-    const span = this.sliceSpan;
-    if (!span) return null;
+    const range = this.sliceRange;
+    if (!range) return null;
     const wanted =
       this.slicePosition === null ? null : fromTenths(this.slicePosition);
     const position =
-      wanted && insideSpan(wanted, span) ? wanted : mul(span, rational(1n, 2n));
+      wanted && insideRange(wanted, range)
+        ? wanted
+        : mul(add(range.low, range.high), rational(1n, 2n));
     return cutSolid(this.kind, this.dimensions, {
       direction: this.sliceDirection,
       heading: this.sliceHeading,
@@ -300,12 +302,12 @@ export class LabState {
    * it half way through.
    */
   private fitSlice() {
-    const span = this.sliceSpan;
-    if (!span) return;
+    const range = this.sliceRange;
+    if (!range) return;
     this.slicePosition =
       this.slicePosition === null
-        ? middleOfSpan(span)
-        : clampToSpan(this.slicePosition, span);
+        ? middleOfRange(range)
+        : clampToRange(this.slicePosition, range);
   }
 
   /**
@@ -313,9 +315,9 @@ export class LabState {
    * nearest tenth, stopping just inside the solid at either end.
    */
   moveSlice(position: number) {
-    const span = this.sliceSpan;
-    if (!span || this.slicePosition === null) return;
-    const next = clampToSpan(position, span);
+    const range = this.sliceRange;
+    if (!range || this.slicePosition === null) return;
+    const next = clampToRange(position, range);
     if (next !== null) this.slicePosition = next;
   }
 

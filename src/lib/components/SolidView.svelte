@@ -1,7 +1,7 @@
 <script lang="ts">
   import Floor from "$lib/components/Floor.svelte";
   import MathText from "$lib/components/MathText.svelte";
-  import { clampToSpan } from "$lib/domain/crossSections";
+  import { clampToRange } from "$lib/domain/crossSections";
   import { evalExact, formatExact } from "$lib/domain/exact";
   import { approximateText, formatApproximate } from "$lib/domain/format";
   import {
@@ -287,22 +287,11 @@
     if (!section) return null;
     const { origin, across, up } = section.plane;
     // The sheet and its arrow hang where the plane crosses the line through
-    // the middle of the solid along the way it moves, not on the middle of
-    // the cut: that shifts sideways as the cut changes shape, which would
-    // make a diagonal slice look as if it slid along its slope rather than
-    // rising straight up.
-    const normal: Vec3 = [
-      across[1] * up[2] - across[2] * up[1],
-      across[2] * up[0] - across[0] * up[2],
-      across[0] * up[1] - across[1] * up[0],
-    ];
-    const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-    const crossing = dot(normal, origin) / dot(normal, section.slide);
-    const anchor: Vec3 = [
-      section.slide[0] * crossing,
-      section.slide[1] * crossing,
-      section.slide[2] * crossing,
-    ];
+    // the middle of the solid along the way it moves, where the position is
+    // measured, not on the middle of the cut: that shifts sideways as the cut
+    // changes shape, which would make a diagonal slice look as if it slid
+    // along its slope rather than rising straight up.
+    const anchor = section.travel.to3d;
     // Wide enough to run right through the solid from wherever it hangs.
     const reachOut =
       lab.mesh.extent * 1.35 +
@@ -324,8 +313,8 @@
       from[2] + direction[2] * length,
     ];
 
-    // What the position measures: a dashed line from where the plane first
-    // touched the solid to the middle of the cut.
+    // What the position measures: a dashed line up the arrow's line, from
+    // where the plane crossed it on first touching the solid to the arrow.
     const from = at(section.travel.from3d);
     const to = at(section.travel.to3d);
 
@@ -393,7 +382,7 @@
         corner(-1, 1),
       ]),
       outline: projectAll(section.outline3d),
-      travel: { from, to, mid: [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2] }, // Each side of the cut, so it can be pointed at here and light up on the
+      travel: { from, to }, // Each side of the cut, so it can be pointed at here and light up on the
       // face-on drawing, and the other way round.
       sides: section.edges.map((edge) => {
         const [x1, y1] = at(edge.from3d);
@@ -603,12 +592,40 @@
     const hit = hitOf(event);
     lab.hover(hit.target);
     hoveredEdgeId = hit.edgeId;
+    if ((event.target as Element | null)?.closest?.("[data-slice]"))
+      showHandle();
+    else hideHandleSoon();
   }
 
   function clearHover() {
     lab.hover(null);
     hoveredEdgeId = null;
+    hideHandleSoon();
   }
+
+  /**
+   * Whether the slice's arrow is showing. It appears while the pointer is over
+   * the cut on the solid or the arrow itself, and lingers a moment after, long
+   * enough to reach an arrow that hangs off the cut.
+   */
+  let handleShown = $state(false);
+  let handleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function showHandle() {
+    clearTimeout(handleTimer);
+    handleTimer = undefined;
+    handleShown = true;
+  }
+
+  function hideHandleSoon() {
+    if (!handleShown || handleTimer !== undefined) return;
+    handleTimer = setTimeout(() => {
+      handleTimer = undefined;
+      handleShown = false;
+    }, 500);
+  }
+
+  $effect(() => () => clearTimeout(handleTimer));
 
   function onPointerDown(event: PointerEvent) {
     if (event.button !== 0) return;
@@ -678,13 +695,30 @@
       target.releasePointerCapture(event.pointerId);
   }
 
+  /**
+   * How far out along the slice's arrow its heads sit, clear of the position
+   * written in its middle: as far as the arrow runs inside the label, plus a
+   * gap. The label is about 7.2px a character in the mono font, plus its
+   * padding, and 20px high.
+   */
+  const handleReach = $derived.by(() => {
+    if (!slicing || lab.slicePosition === null) return 28;
+    const width = String(lab.slicePosition).length * 7.2 + 14;
+    const [dx, dy] = slicing.handle.direction;
+    const inside = Math.min(
+      Math.abs(dx) < 1e-6 ? Infinity : width / 2 / Math.abs(dx),
+      Math.abs(dy) < 1e-6 ? Infinity : 10 / Math.abs(dy),
+    );
+    return Math.max(28, inside + 14);
+  });
+
   /** The first and last tenth the plane can stop on, strictly inside. */
   const sliceEnds = $derived.by(() => {
-    const span = lab.sliceSpan;
-    if (!span) return null;
+    const range = lab.sliceRange;
+    if (!range) return null;
     return {
-      lowest: clampToSpan(0, span),
-      highest: clampToSpan(Infinity, span),
+      lowest: clampToRange(-Infinity, range),
+      highest: clampToRange(Infinity, range),
     };
   });
 
@@ -888,6 +922,7 @@
         stroke="none"
         class="cursor-pointer"
         data-target={sectionTarget("area")}
+        data-slice
         data-testid="section-on-solid"
       />
       {#each nearFacets as facet, index (index)}
@@ -949,6 +984,7 @@
           class="cursor-pointer"
           data-target={side.target}
           data-section-side={side.id}
+          data-slice
         />
       {/each}
       <line
@@ -1060,14 +1096,6 @@
     class="pointer-events-none absolute inset-0 overflow-hidden"
     class:invisible={!measured}
   >
-    {#if slicing && lab.slicePosition !== null}
-      <span
-        class="absolute -translate-x-1/2 -translate-y-1/2 rounded-md border border-[#7c2d12]/40 bg-panel/90 px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap text-[#7c2d12] shadow-sm"
-        style:left="{centerX + slicing.travel.mid[0]}px"
-        style:top="{centerY + slicing.travel.mid[1]}px"
-        data-testid="slice-travel-label">{lab.slicePosition}</span
-      >
-    {/if}
     {#if slicing?.angle}
       <span
         class="absolute -translate-x-1/2 -translate-y-1/2 font-mono text-xs font-bold text-[#7c2d12]"
@@ -1161,7 +1189,11 @@
 
     {#if slicing && lab.slicePosition !== null && sliceEnds}
       <!-- Dragged along the arrow, the plane moves through the solid; the arrow
-           keys move it a tenth at a time. Last, so no badge can cover it. -->
+           keys move it a tenth at a time. Last, so no badge can cover it. It
+           shows only while the cut is pointed at, or the arrow is held or has
+           the keyboard, except on a touch screen, which cannot point without
+           pressing. Hidden, it still answers the pointer, so it can be found
+           where it is. -->
       <div
         role="slider"
         tabindex="0"
@@ -1177,11 +1209,16 @@
         aria-valuenow={lab.slicePosition}
         aria-valuetext="{lab.slicePosition} {linear}"
         data-testid="slice-handle"
-        class="pointer-events-auto absolute h-16 w-16 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full focus-visible:outline-2 focus-visible:outline-accent"
+        class="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 touch-none rounded-full transition-opacity duration-150 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-accent [@media(hover:none)]:opacity-100"
+        class:opacity-0={!handleShown && !sliding}
         class:cursor-grab={!sliding}
         class:cursor-grabbing={sliding}
         style:left="{centerX + slicing.handle.at[0]}px"
         style:top="{centerY + slicing.handle.at[1]}px"
+        style:width="{2 * (handleReach + 4)}px"
+        style:height="{2 * (handleReach + 4)}px"
+        onpointerenter={showHandle}
+        onpointerleave={hideHandleSoon}
         onpointerdown={onHandleDown}
         onpointermove={onHandleMove}
         onpointerup={onHandleUp}
@@ -1190,7 +1227,8 @@
       >
         <svg
           class="h-full w-full overflow-visible"
-          viewBox="-32 -32 64 64"
+          viewBox="{-(handleReach + 4)} {-(handleReach + 4)} {2 *
+            (handleReach + 4)} {2 * (handleReach + 4)}"
           aria-hidden="true"
         >
           <g
@@ -1199,18 +1237,38 @@
             stroke-linecap="round"
           >
             <g stroke="white" stroke-width="6" fill="white" opacity="0.9">
-              <line x1="-20" y1="0" x2="20" y2="0" />
-              <polygon points="30,0 18,-9 18,9" />
-              <polygon points="-30,0 -18,-9 -18,9" />
+              <line x1={-handleReach + 8} y1="0" x2={handleReach - 8} y2="0" />
+              <polygon
+                points="{handleReach + 2},0 {handleReach - 10},-9 {handleReach -
+                  10},9"
+              />
+              <polygon
+                points="{-handleReach - 2},0 {-handleReach +
+                  10},-9 {-handleReach + 10},9"
+              />
             </g>
             <g stroke="#7c2d12" stroke-width="3" fill="#7c2d12">
-              <line x1="-20" y1="0" x2="20" y2="0" />
-              <polygon points="28,0 19,-7 19,7" stroke-width="1.5" />
-              <polygon points="-28,0 -19,-7 -19,7" stroke-width="1.5" />
+              <line x1={-handleReach + 8} y1="0" x2={handleReach - 8} y2="0" />
+              <polygon
+                points="{handleReach},0 {handleReach - 9},-7 {handleReach -
+                  9},7"
+                stroke-width="1.5"
+              />
+              <polygon
+                points="{-handleReach},0 {-handleReach + 9},-7 {-handleReach +
+                  9},7"
+                stroke-width="1.5"
+              />
             </g>
-            <circle r="7" fill="#f59e0b" stroke="#7c2d12" stroke-width="2.5" />
           </g>
         </svg>
+        <!-- The position, written between the heads, upright however the
+             arrow points. -->
+        <span
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-md border border-[#7c2d12]/40 bg-panel px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap text-[#7c2d12] shadow-sm"
+          aria-hidden="true"
+          data-testid="slice-travel-label">{lab.slicePosition}</span
+        >
       </div>
     {/if}
   </div>

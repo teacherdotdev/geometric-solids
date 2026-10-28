@@ -3,15 +3,26 @@ import {
   type Slice,
   type SliceHeading,
   SLICE_HEADINGS,
-  clampToSpan,
+  type SliceRange,
+  clampToRange,
   cutSolid,
-  middleOfSpan,
-  sliceSpan,
+  middleOfRange,
+  sliceRange,
 } from "./crossSections";
 import { evalExact, formatExact } from "./exact";
 import { fromTenths, rational, toNumber } from "./rational";
 import { buildSolid } from "./solids";
 import type { Dimensions, SolidKind } from "./types";
+
+/** Where the plane first and last touches the solid, as numbers. */
+function rangeOf(
+  kind: SolidKind,
+  d: Dimensions,
+  heading: SliceHeading,
+): [number, number] {
+  const range = sliceRange(kind, d, heading)!;
+  return [toNumber(range.low), toNumber(range.high)];
+}
 
 function horizontal(position: number): Slice {
   return {
@@ -92,35 +103,45 @@ describe("horizontal slices of a rectangular prism and a cube", () => {
 
 describe("the slice position", () => {
   it("runs strictly between the bottom face and the top", () => {
-    const span = sliceSpan("rectangularPrism", PRISM, "level");
-    expect(span && toNumber(span)).toBe(5);
+    expect(rangeOf("rectangularPrism", PRISM, "level")).toEqual([0, 5]);
     expect(cutSolid("rectangularPrism", PRISM, horizontal(0))).toBeNull();
     expect(cutSolid("rectangularPrism", PRISM, horizontal(5))).toBeNull();
     expect(cutSolid("rectangularPrism", PRISM, horizontal(4.9))).not.toBeNull();
   });
 
   it("is pulled back inside the solid, never onto an end", () => {
-    const span = rational(5);
-    expect(clampToSpan(7, span)).toBe(4.9);
-    expect(clampToSpan(0, span)).toBe(0.1);
-    expect(clampToSpan(2.5, span)).toBe(2.5);
-    expect(clampToSpan(3, rational(7, 2))).toBe(3);
-    expect(clampToSpan(9, rational(7, 2))).toBe(3.4);
-    expect(clampToSpan(9, rational(7, 20))).toBe(0.3);
+    const upTo = (high: ReturnType<typeof rational>): SliceRange => ({
+      low: rational(0),
+      high,
+    });
+    const span = upTo(rational(5));
+    expect(clampToRange(7, span)).toBe(4.9);
+    expect(clampToRange(0, span)).toBe(0.1);
+    expect(clampToRange(2.5, span)).toBe(2.5);
+    expect(clampToRange(3, upTo(rational(7, 2)))).toBe(3);
+    expect(clampToRange(9, upTo(rational(7, 2)))).toBe(3.4);
+    expect(clampToRange(9, upTo(rational(7, 20)))).toBe(0.3);
+    // A range that starts below 0, between tenths.
+    const below = { low: rational(-33, 20), high: rational(23, 20) };
+    expect(clampToRange(-9, below)).toBe(-1.6);
+    expect(clampToRange(9, below)).toBe(1.1);
+    expect(clampToRange(-1, below)).toBe(-1);
   });
 
   it("has nowhere to stand in a solid only a tenth thick", () => {
-    expect(clampToSpan(1, rational(1, 10))).toBeNull();
+    expect(
+      clampToRange(1, { low: rational(0), high: rational(1, 10) }),
+    ).toBeNull();
   });
 
   it("starts half way up", () => {
-    expect(middleOfSpan(rational(5))).toBe(2.5);
-    expect(middleOfSpan(rational(3))).toBe(1.5);
+    expect(middleOfRange({ low: rational(0), high: rational(5) })).toBe(2.5);
+    expect(middleOfRange({ low: rational(-1), high: rational(3) })).toBe(1);
   });
 
   it("cannot be taken through a solid that offers no slices", () => {
     expect(
-      sliceSpan("logoSlab", { m: 2, r: 1, b: 1, h: 1 }, "level"),
+      sliceRange("logoSlab", { m: 2, r: 1, b: 1, h: 1 }, "level"),
     ).toBeNull();
   });
 });
@@ -137,7 +158,8 @@ describe("every cross section", () => {
   /** A handful of positions through the solid for each heading. */
   function slices(kind: SolidKind, d: Dimensions): Slice[] {
     return headings.flatMap((heading) => {
-      const span = sliceSpan(kind, d, heading)!;
+      const range = sliceRange(kind, d, heading)!;
+      const [low, high] = [toNumber(range.low), toNumber(range.high)];
       const direction =
         heading === "level"
           ? "horizontal"
@@ -147,7 +169,7 @@ describe("every cross section", () => {
       return [0.15, 0.5, 0.8].map((share) => ({
         direction,
         heading,
-        position: fromTenths(clampToSpan(toNumber(span) * share, span)!),
+        position: fromTenths(clampToRange(low + (high - low) * share, range)!),
       })) as Slice[];
     });
   }
@@ -218,9 +240,9 @@ function sliceOf(heading: SliceHeading, position: number): Slice {
 
 describe("vertical and diagonal slices of a rectangular prism and a cube", () => {
   it("cut a cube corner to corner in a 2 by 2√2 rectangle", () => {
-    const section = cut("cube", { s: 2 }, sliceOf("right", 2));
+    const section = cut("cube", { s: 2 }, sliceOf("right", 1));
     expect(section.name).toBe("Rectangle");
-    expect(lengths("cube", { s: 2 }, sliceOf("right", 2))).toEqual([
+    expect(lengths("cube", { s: 2 }, sliceOf("right", 1))).toEqual([
       "2",
       "2",
       "2√2",
@@ -237,8 +259,12 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
       ["cube", { s: 2 }],
     ] as const) {
       for (const heading of headings) {
-        const span = toNumber(sliceSpan(kind, d, heading)!);
-        for (let tenths = 1; tenths < span * 10; tenths += 1) {
+        const [low, high] = rangeOf(kind, d, heading);
+        for (
+          let tenths = Math.round(low * 10) + 1;
+          tenths < high * 10;
+          tenths += 1
+        ) {
           const section = cut(kind, d, sliceOf(heading, tenths / 10));
           expect(["Rectangle", "Square"]).toContain(section.name);
         }
@@ -247,16 +273,13 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
   });
 
   it("measure the position from the left, from the back, or along the slide", () => {
-    expect(toNumber(sliceSpan("rectangularPrism", PRISM, "frontToBack")!)).toBe(
-      3,
-    );
-    expect(toNumber(sliceSpan("rectangularPrism", PRISM, "sideToSide")!)).toBe(
-      4,
-    );
+    expect(rangeOf("rectangularPrism", PRISM, "frontToBack")).toEqual([0, 3]);
+    expect(rangeOf("rectangularPrism", PRISM, "sideToSide")).toEqual([0, 4]);
     // A diagonal rises from one bottom edge until it leaves the opposite top
-    // one: the length plus the height.
-    expect(toNumber(sliceSpan("rectangularPrism", PRISM, "right")!)).toBe(8);
-    expect(toNumber(sliceSpan("rectangularPrism", PRISM, "front")!)).toBe(9);
+    // one, the length plus the height. It is measured up the middle of the
+    // solid, which it first crosses half the length below the bottom face.
+    expect(rangeOf("rectangularPrism", PRISM, "right")).toEqual([-1.5, 6.5]);
+    expect(rangeOf("rectangularPrism", PRISM, "front")).toEqual([-2, 7]);
 
     const vertical = cut("rectangularPrism", PRISM, sliceOf("frontToBack", 1));
     expect(
@@ -266,7 +289,7 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
     for (const [x] of vertical.outline3d) expect(x).toBeCloseTo(-0.5);
   });
 
-  it("draw the position as a line as long as it, from where the plane first touched", () => {
+  it("draw the position as a line as long as it, through the middle of the solid", () => {
     for (const heading of ["level", "frontToBack", "right", "back"] as const) {
       const section = cut("cube", { s: 2 }, sliceOf(heading, 1.5));
       const { from3d, to3d } = section.travel;
@@ -278,31 +301,53 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
         ),
       ).toBeCloseTo(1.5);
     }
+    // Level, it runs up the middle from the bottom face.
+    const level = cut("cube", { s: 2 }, sliceOf("level", 1.5)).travel;
+    expect(level.from3d.map((v) => v + 0)).toEqual([0, -1, 0]);
+    expect(level.to3d[1]).toBeCloseTo(0.5);
   });
 
-  it("raise a diagonal straight up from the bottom edge it rises toward", () => {
+  it("measure a diagonal's height up the middle, where its arrow is", () => {
     for (const heading of ["right", "back", "left", "front"] as const) {
-      const section = cut("cube", { s: 2 }, sliceOf(heading, 1.5));
+      const section = cut("cube", { s: 2 }, sliceOf(heading, 0.5));
       expect(section.slide).toEqual([0, 1, 0]);
-      const [x, y, z] = section.travel.from3d;
-      expect(y).toBeCloseTo(-1);
-      expect(section.travel.to3d[0]).toBeCloseTo(x);
-      expect(section.travel.to3d[1]).toBeCloseTo(0.5);
-      expect(section.travel.to3d[2]).toBeCloseTo(z);
+      const { from3d, to3d } = section.travel;
+      for (const [x, , z] of [from3d, to3d]) {
+        expect(x).toBeCloseTo(0);
+        expect(z).toBeCloseTo(0);
+      }
+      // From the bottom face, which the mesh puts at y = -1, up to the plane.
+      expect(from3d[1]).toBeCloseTo(-1);
+      expect(to3d[1]).toBeCloseTo(-0.5);
+      const { origin, across, up } = section.plane;
+      const normal = [
+        across[1] * up[2] - across[2] * up[1],
+        across[2] * up[0] - across[0] * up[2],
+        across[0] * up[1] - across[1] * up[0],
+      ];
+      expect(
+        normal.reduce((sum, n, i) => sum + n * (to3d[i] - origin[i]), 0),
+      ).toBeCloseTo(0);
     }
-    // Rising toward the right, it first touches the bottom right edge, and
-    // crosses the right face as high as it has risen.
-    const right = cut("cube", { s: 2 }, sliceOf("right", 1.5));
-    expect(right.travel.from3d[0]).toBeCloseTo(1);
+    // Rising toward the right, it first touches the bottom right edge when it
+    // crosses the middle a half side below the bottom face, so it crosses the
+    // right face a half side higher than the middle.
+    const right = cut("cube", { s: 2 }, sliceOf("right", 0.5));
     expect(
       right.outline3d.some(
         ([px, py]) => px > 0.999 && py > 0.499 && py < 0.501,
       ),
     ).toBe(true);
-    // A cone's starts at the foot of the rim on that side.
-    const cone = cut("cone", { r: 3, h: 4 }, sliceOf("right", 2));
-    expect(cone.travel.from3d[0]).toBeCloseTo(3);
-    expect(cone.travel.from3d[1]).toBeCloseTo(-2);
+    expect(rangeOf("cube", { s: 2 }, "right")).toEqual([-1, 3]);
+    // Below 0 it crosses the middle under the bottom face, and still cuts the
+    // solid.
+    const under = cut("cube", { s: 2 }, sliceOf("right", -0.5));
+    expect(under.travel.to3d[1]).toBeCloseTo(-1.5);
+    // A cone's starts at the foot of the rim, a radius out from the middle.
+    expect(rangeOf("cone", { r: 3, h: 4 }, "right")).toEqual([-3, 4]);
+    const cone = cut("cone", { r: 3, h: 4 }, sliceOf("right", 2)).travel;
+    expect(cone.from3d[1]).toBeCloseTo(-2);
+    expect(cone.to3d[1]).toBeCloseTo(0);
   });
 
   it("mark a right angle for a vertical slice, 45° for a diagonal, and none level", () => {
@@ -310,7 +355,7 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
     expect(cut("cube", { s: 2 }, sliceOf("sideToSide", 1)).angle?.degrees).toBe(
       90,
     );
-    const diagonal = cut("cube", { s: 2 }, sliceOf("left", 2)).angle!;
+    const diagonal = cut("cube", { s: 2 }, sliceOf("left", 1)).angle!;
     expect(diagonal.degrees).toBe(45);
     // The mark sits on the bottom face's level, which the mesh puts at y = -1.
     expect(diagonal.at[1]).toBeCloseTo(-1);
@@ -324,7 +369,7 @@ describe("vertical and diagonal slices of a rectangular prism and a cube", () =>
 
 describe("the working for a cross section's area", () => {
   it("names the sides its formula uses", () => {
-    const section = cut("rectangularPrism", PRISM, sliceOf("right", 2.5));
+    const section = cut("rectangularPrism", PRISM, sliceOf("right", 1));
     expect(section.area.formula).toBe("A = lw");
     const length = (id: string) =>
       formatExact(section.edges.find((edge) => edge.id === id)!.length);
@@ -408,8 +453,12 @@ describe("slices of a square pyramid", () => {
 
   it("give a trapezoid on every diagonal", () => {
     for (const heading of ["right", "back", "left", "front"] as const) {
-      const span = toNumber(sliceSpan("squarePyramid", PYRAMID, heading)!);
-      for (let tenths = 1; tenths < span * 10; tenths += 7) {
+      const [low, high] = rangeOf("squarePyramid", PYRAMID, heading);
+      for (
+        let tenths = Math.round(low * 10) + 1;
+        tenths < high * 10;
+        tenths += 7
+      ) {
         expect(
           cut("squarePyramid", PYRAMID, sliceOf(heading, tenths / 10)).name,
         ).toBe("Trapezoid");
@@ -474,13 +523,13 @@ describe("slices of a right-triangular prism", () => {
   });
 
   it("lean into a rectangle one way and a trapezoid or triangle the other", () => {
-    expect(cut("triangularPrism", PRISM3, sliceOf("right", 4)).name).toBe(
+    expect(cut("triangularPrism", PRISM3, sliceOf("right", 2)).name).toBe(
       "Rectangle",
     );
-    expect(cut("triangularPrism", PRISM3, sliceOf("front", 2)).name).toBe(
+    expect(cut("triangularPrism", PRISM3, sliceOf("front", -0.5)).name).toBe(
       "Trapezoid",
     );
-    expect(cut("triangularPrism", PRISM3, sliceOf("front", 6)).name).toBe(
+    expect(cut("triangularPrism", PRISM3, sliceOf("front", 3.5)).name).toBe(
       "Right triangle",
     );
   });
@@ -516,7 +565,7 @@ describe("slices of a cylinder", () => {
   });
 
   it("give an ellipse with axes 2r and 2√2·r while the cut misses both disks", () => {
-    const section = cut("cylinder", { r: 1, h: 4 }, sliceOf("right", 3));
+    const section = cut("cylinder", { r: 1, h: 4 }, sliceOf("right", 2));
     expect(section.name).toBe("Ellipse");
     expect(formatExact(section.area.exact!)).toBe("√2π");
     expect(section.area.formula).toBe("A = πab");
@@ -527,12 +576,12 @@ describe("slices of a cylinder", () => {
   });
 
   it("give part of an ellipse, with a rounded area only, once it cuts a disk", () => {
-    const section = cut("cylinder", { r: 2, h: 3 }, sliceOf("right", 3.5));
+    const section = cut("cylinder", { r: 2, h: 3 }, sliceOf("right", 1.5));
     expect(section.name).toBe("Part of an ellipse");
     expect(section.area.exact).toBeNull();
     expect(section.area.formula).toBeNull();
     // Cut off by both disks, 3/4 of the way out from the middle each way.
-    expect(lengths("cylinder", { r: 2, h: 3 }, sliceOf("right", 3.5))).toEqual([
+    expect(lengths("cylinder", { r: 2, h: 3 }, sliceOf("right", 1.5))).toEqual([
       "√7",
       "√7",
     ]);
@@ -545,15 +594,19 @@ describe("slices of a cylinder", () => {
   it("give the same cross section on every diagonal", () => {
     const areas = (["right", "back", "left", "front"] as const).map(
       (heading) =>
-        cut("cylinder", { r: 2, h: 3 }, sliceOf(heading, 2.5)).area.approximate,
+        cut("cylinder", { r: 2, h: 3 }, sliceOf(heading, 0.5)).area.approximate,
     );
     for (const area of areas) expect(area).toBeCloseTo(areas[0], 9);
   });
 
   it("has an area close to what its drawn outline encloses", () => {
     for (const heading of ["level", "frontToBack", "right", "front"] as const) {
-      const span = toNumber(sliceSpan("cylinder", { r: 2, h: 3 }, heading)!);
-      for (let tenths = 1; tenths < span * 10; tenths += 3) {
+      const [low, high] = rangeOf("cylinder", { r: 2, h: 3 }, heading);
+      for (
+        let tenths = Math.round(low * 10) + 1;
+        tenths < high * 10;
+        tenths += 3
+      ) {
         const section = cut(
           "cylinder",
           { r: 2, h: 3 },
@@ -582,7 +635,7 @@ describe("slices of a sphere", () => {
   });
 
   it("run from its lowest point to its highest, whatever way the slice faced", () => {
-    expect(toNumber(sliceSpan("sphere", { r: 3 }, "right")!)).toBe(6);
+    expect(rangeOf("sphere", { r: 3 }, "right")).toEqual([0, 6]);
     expect(cut("sphere", { r: 3 }, sliceOf("right", 1)).name).toBe("Circle");
     expect(cutSolid("sphere", { r: 3 }, horizontal(6))).toBeNull();
   });
@@ -615,8 +668,17 @@ describe("slices of a cone", () => {
     expect(formatExact(off.lines[0].length)).toBe("4/3");
   });
 
+  it("name the triangle through the tip right isosceles when the cone is as tall as its radius", () => {
+    const tip = cut("cone", { r: 2, h: 2 }, sliceOf("frontToBack", 2));
+    expect(tip.name).toBe("Right isosceles triangle");
+    expect(lengths("cone", { r: 2, h: 2 }, sliceOf("frontToBack", 2))).toEqual(
+      ["2√2", "2√2", "4"],
+    );
+    expect(formatExact(tip.area.exact!)).toBe("4");
+  });
+
   it("give an ellipse on a diagonal when the cone is steeper than 45°", () => {
-    const section = cut("cone", CONE, sliceOf("right", 6));
+    const section = cut("cone", CONE, sliceOf("right", 3));
     expect(section.name).toBe("Ellipse");
     expect(section.lines.map((line) => formatExact(line.length))).toEqual([
       "3√7/7",
@@ -624,14 +686,14 @@ describe("slices of a cone", () => {
     ]);
     expect(formatExact(section.area.exact!)).toBe("36√14π/49");
     // Lower down, the cut runs into the base.
-    const part = cut("cone", CONE, sliceOf("right", 4));
+    const part = cut("cone", CONE, sliceOf("right", 1));
     expect(part.name).toBe("Part of an ellipse");
     expect(part.area.exact).toBeNull();
-    expect(lengths("cone", CONE, sliceOf("right", 4))).toEqual(["4√2"]);
+    expect(lengths("cone", CONE, sliceOf("right", 1))).toEqual(["4√2"]);
   });
 
   it("give a parabola region, worked out exactly, when the cone is at 45°", () => {
-    const section = cut("cone", { r: 2, h: 2 }, sliceOf("right", 2));
+    const section = cut("cone", { r: 2, h: 2 }, sliceOf("right", 0));
     expect(section.name).toBe("Parabola region");
     expect(section.area.formula).toBe("A = 2wh / 3");
     expect(section.area.substitution).toBe("A = 2 × 4 × √2 / 3");
@@ -639,13 +701,13 @@ describe("slices of a cone", () => {
   });
 
   it("give a hyperbola region when the cone is flatter, and a triangle through its tip", () => {
-    const section = cut("cone", { r: 4, h: 2 }, sliceOf("right", 5));
+    const section = cut("cone", { r: 4, h: 2 }, sliceOf("right", 1));
     expect(section.name).toBe("Hyperbola region");
     expect(section.area.exact).toBeNull();
 
-    const tip = cut("cone", { r: 4, h: 2 }, sliceOf("right", 6));
+    const tip = cut("cone", { r: 4, h: 2 }, sliceOf("right", 2));
     expect(tip.name).toBe("Isosceles triangle");
-    expect(lengths("cone", { r: 4, h: 2 }, sliceOf("right", 6))).toEqual([
+    expect(lengths("cone", { r: 4, h: 2 }, sliceOf("right", 2))).toEqual([
       "2√5",
       "2√5",
       "4√3",
@@ -656,7 +718,7 @@ describe("slices of a cone", () => {
   it("give the same cross section on every diagonal", () => {
     for (const d of [CONE, { r: 2, h: 2 }, { r: 4, h: 2 }]) {
       const areas = (["right", "back", "left", "front"] as const).map(
-        (heading) => cut("cone", d, sliceOf(heading, 2.5)).area.approximate,
+        (heading) => cut("cone", d, sliceOf(heading, 0.5)).area.approximate,
       );
       for (const area of areas) expect(area).toBeCloseTo(areas[0], 9);
     }
@@ -670,8 +732,12 @@ describe("slices of a cone", () => {
         "right",
         "back",
       ] as const) {
-        const span = toNumber(sliceSpan("cone", d, heading)!);
-        for (let tenths = 1; tenths < span * 10; tenths += 3) {
+        const [low, high] = rangeOf("cone", d, heading);
+        for (
+          let tenths = Math.round(low * 10) + 1;
+          tenths < high * 10;
+          tenths += 3
+        ) {
           const section = cut("cone", d, sliceOf(heading, tenths / 10));
           expect(section.area.approximate).toBeGreaterThan(0);
           expect(
@@ -685,8 +751,12 @@ describe("slices of a cone", () => {
   it("never call a rounded area exact", () => {
     for (const d of [CONE, { r: 2, h: 2 }, { r: 4, h: 2 }]) {
       for (const heading of ["frontToBack", "right"] as const) {
-        const span = toNumber(sliceSpan("cone", d, heading)!);
-        for (let tenths = 1; tenths < span * 10; tenths += 1) {
+        const [low, high] = rangeOf("cone", d, heading);
+        for (
+          let tenths = Math.round(low * 10) + 1;
+          tenths < high * 10;
+          tenths += 1
+        ) {
           const section = cut("cone", d, sliceOf(heading, tenths / 10));
           const rounded = ["partOfEllipse", "hyperbolaRegion"].includes(
             section.shape,

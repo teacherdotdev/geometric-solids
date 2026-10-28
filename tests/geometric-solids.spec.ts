@@ -592,7 +592,7 @@ test("slices vertically and diagonally, turning a quarter at a time", async ({
   await expect(page.getByTestId("slice-heading")).toHaveText(
     "rising to the right",
   );
-  await moveSliceTo(page, 2);
+  await moveSliceTo(page, 1);
   await expect(page.getByTestId("slice-angle-label")).toHaveText("45°");
   await expect(page.getByTestId("section-name")).toHaveText("Rectangle");
   expect(await sectionSides(page)).toEqual(["2", "2", "2√2", "2√2"]);
@@ -611,22 +611,28 @@ test("slices vertically and diagonally, turning a quarter at a time", async ({
   }
 
   // A diagonal moves straight up and down: dragging the arrow up raises it.
+  // Its height is measured up the middle, from the bottom face.
   await expect(sliceHandle(page)).toHaveAttribute(
     "aria-label",
-    /Height risen from where it first touches/,
+    /Height above the bottom face, at the middle/,
   );
   const before = (await sliceHandle(page).boundingBox())!;
   await dragSlice(page, 0, -40);
   const after = (await sliceHandle(page).boundingBox())!;
   expect(
     Number(await sliceHandle(page).getAttribute("aria-valuenow")),
-  ).toBeGreaterThan(2);
+  ).toBeGreaterThan(1);
   expect(after.y).toBeLessThan(before.y);
   // Straight up: the arrow, and the plane it hangs on, never drift sideways.
   expect(after.x).toBeCloseTo(before.x, 0);
-  await moveSliceTo(page, 0.5);
+  // It first touches the cube crossing the middle a half side below the
+  // bottom face, so it starts below 0.
+  await sliceHandle(page).press("Home");
+  await expect(sliceHandle(page)).toHaveAttribute("aria-valuenow", "-0.9");
+  await expect(page.getByTestId("slice-travel-label")).toHaveText("-0.9");
+  await moveSliceTo(page, -0.5);
   const lowest = (await sliceHandle(page).boundingBox())!;
-  await moveSliceTo(page, 3.5);
+  await moveSliceTo(page, 2.5);
   const highest = (await sliceHandle(page).boundingBox())!;
   expect(highest.x).toBeCloseTo(lowest.x, 0);
   expect(highest.y).toBeLessThan(lowest.y);
@@ -768,13 +774,13 @@ test("slices a cylinder into an ellipse, or part of one with a rounded area", as
   await expect(page.getByTestId("section-name")).toHaveText("Circle");
 
   await page.getByTestId("slice-diagonal").click();
-  await moveSliceTo(page, 3);
+  await moveSliceTo(page, 2);
   await expect(page.getByTestId("section-name")).toHaveText("Ellipse");
   await expect(page.getByTestId("section-area")).toContainText("√2π");
 
   // A squat cylinder: the cut runs through both disks.
   await page.getByTestId("input-h").fill("1");
-  await moveSliceTo(page, 1.5);
+  await moveSliceTo(page, 0.5);
   await expect(page.getByTestId("section-name")).toHaveText(
     "Part of an ellipse",
   );
@@ -810,13 +816,13 @@ test("slices a cone into the conics, by how steep it is", async ({ page }) => {
 
   // Steeper than 45°: an ellipse.
   await page.getByTestId("slice-diagonal").click();
-  await moveSliceTo(page, 6);
+  await moveSliceTo(page, 3);
   await expect(page.getByTestId("section-name")).toHaveText("Ellipse");
 
   // Exactly 45°: a parabola region, whose area Archimedes worked out exactly.
   await page.getByTestId("input-r").fill("2");
   await page.getByTestId("input-h").fill("2");
-  await moveSliceTo(page, 2);
+  await moveSliceTo(page, 0);
   await expect(page.getByTestId("section-name")).toHaveText("Parabola region");
   await page.getByTestId("section-card").hover();
   await expect(page.getByTestId("section-formula")).toContainText(
@@ -826,7 +832,7 @@ test("slices a cone into the conics, by how steep it is", async ({ page }) => {
 
   // Flatter than 45°: a hyperbola region.
   await page.getByTestId("input-r").fill("4");
-  await moveSliceTo(page, 5);
+  await moveSliceTo(page, 1);
   await expect(page.getByTestId("section-name")).toHaveText("Hyperbola region");
 });
 
