@@ -78,3 +78,53 @@ export function splitMath(text: string): MathSegment[] {
 export function hasRadical(text: string): boolean {
   return splitMath(text).some((segment) => segment.kind === "radical");
 }
+
+/**
+ * Splitting maths text so a fraction can be set as one number over another.
+ *
+ * Exact values with no terminating decimal arrive written on one line, such as
+ * `5√35/47` or `8√2/7`, which reads as 5√35 ÷ 47 only once it has been
+ * puzzled out. A fraction is a value written tight against its slash; a
+ * spaced ` / 2` is the division step of a substitution and stays on the line.
+ */
+export type FractionSegment =
+  | { readonly kind: "text"; readonly text: string }
+  | {
+      readonly kind: "fraction";
+      readonly numerator: string;
+      readonly denominator: string;
+    };
+
+/**
+ * The numerator runs back from the slash to the nearest space, bracket,
+ * operator or sign; the denominator is the whole number after it.
+ */
+const FRACTION = /([^\s()×=+\-−/·,]+)\/(\d+)/g;
+
+/**
+ * Plain runs and fractions, in order. Brackets that hold nothing but a
+ * fraction are dropped: they only grouped it while it was written on one
+ * line, and a stacked fraction is grouped already.
+ */
+export function splitFractions(text: string): FractionSegment[] {
+  const segments: FractionSegment[] = [];
+  let last = 0;
+  for (const match of text.matchAll(FRACTION)) {
+    let at = match.index ?? 0;
+    let end = at + match[0].length;
+    if (text[at - 1] === "(" && text[end] === ")" && at - 1 >= last) {
+      at -= 1;
+      end += 1;
+    }
+    if (at > last) segments.push({ kind: "text", text: text.slice(last, at) });
+    segments.push({
+      kind: "fraction",
+      numerator: match[1],
+      denominator: match[2],
+    });
+    last = end;
+  }
+  if (last < text.length)
+    segments.push({ kind: "text", text: text.slice(last) });
+  return segments;
+}

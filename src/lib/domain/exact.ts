@@ -12,6 +12,7 @@ import {
   ONE,
   type Rational,
   add as addRational,
+  div as divRational,
   isZero,
   mul as mulRational,
   rational,
@@ -112,6 +113,24 @@ export function scaleExact(value: Exact, factor: Rational): Exact {
   return normalize(
     value.map((term) => ({ ...term, coeff: mulRational(term.coeff, factor) })),
   );
+}
+
+/**
+ * Divide by a single term without π, such as 5 or 2√2, by rationalising the
+ * denominator: x / (c√k) = x√k / (ck). Null for any other divisor, whose
+ * quotient this representation cannot always hold.
+ */
+export function divideExact(value: Exact, divisor: Exact): Exact | null {
+  const terms = normalize(divisor);
+  if (terms.length !== 1 || terms[0].pi !== 0) return null;
+  const { coeff, radicand } = terms[0];
+  return mulExact(value, [
+    {
+      coeff: divRational(ONE, mulRational(coeff, rational(radicand))),
+      pi: 0,
+      radicand,
+    },
+  ]);
 }
 
 /** Approximate numeric value, using calculator π rather than 3.14. */

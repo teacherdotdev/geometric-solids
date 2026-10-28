@@ -72,6 +72,30 @@ a {
   line-height: 1.25;
 }
 
+/* A fraction set as one number over another, centred on the line it sits in.
+   The two numbers are a little smaller than the text around them, so the pair
+   stays close to one line's height and a badge does not balloon around it. */
+.fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  vertical-align: middle;
+  margin: 0 0.1em;
+  font-size: 0.85em;
+  line-height: 1.15;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.fraction > .fraction-numerator {
+  padding: 0 0.15em 0.05em;
+  border-bottom: 0.09em solid currentColor;
+}
+
+.fraction > .fraction-denominator {
+  padding: 0.05em 0.15em 0;
+}
+
 /* The photo caption on the About page, in the spirit of a note written on the
    print itself. System script faces only: nothing is fetched for it. */
 .handwriting {

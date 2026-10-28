@@ -5,6 +5,7 @@
  * Everything here is pure. Rendering, highlighting and answer visibility never
  * feed back into these numbers.
  */
+import { slicesSolid } from "./crossSections";
 import {
   type Exact,
   addExact,
@@ -32,6 +33,7 @@ import {
   type SolidKind,
   type SolidModel,
   type SurfaceTerm,
+  type ViewMode,
 } from "./types";
 
 export interface SolidDefinition {
@@ -45,6 +47,12 @@ export interface SolidDefinition {
   readonly defaults: Dimensions;
   /** False for the sphere, which has no distortion-free flat net. */
   readonly hasNet: boolean;
+  /**
+   * True only where whole unit cubes fill the solid exactly: the rectangular
+   * prism and the cube. Any other solid would cut them, or be approximated by
+   * a staircase of them, and a count of those is not its volume.
+   */
+  readonly hasCubes: boolean;
   /**
    * A hue this solid is drawn in when nothing is selected, for a solid that is
    * a picture of something and has a colour of its own. Unset means the usual
@@ -625,6 +633,7 @@ export const SOLIDS: Record<SolidKind, SolidDefinition> = {
     ],
     defaults: { l: 3, w: 4, h: 5 },
     hasNet: true,
+    hasCubes: true,
     build: rectangularPrism,
   },
   cube: {
@@ -637,6 +646,7 @@ export const SOLIDS: Record<SolidKind, SolidDefinition> = {
     ],
     defaults: { s: 2 },
     hasNet: true,
+    hasCubes: true,
     build: cube,
   },
   triangularPrism: {
@@ -663,6 +673,7 @@ export const SOLIDS: Record<SolidKind, SolidDefinition> = {
     ],
     defaults: { a: 3, b: 4, p: 5 },
     hasNet: true,
+    hasCubes: false,
     build: triangularPrism,
   },
   squarePyramid: {
@@ -684,6 +695,7 @@ export const SOLIDS: Record<SolidKind, SolidDefinition> = {
     ],
     defaults: { b: 6, h: 4 },
     hasNet: true,
+    hasCubes: false,
     build: squarePyramid,
   },
   cylinder: {
@@ -701,6 +713,7 @@ export const SOLIDS: Record<SolidKind, SolidDefinition> = {
     ],
     defaults: { r: 2, h: 3 },
     hasNet: true,
+    hasCubes: false,
     build: cylinder,
   },
   cone: {
@@ -718,6 +731,7 @@ export const SOLIDS: Record<SolidKind, SolidDefinition> = {
     ],
     defaults: { r: 3, h: 4 },
     hasNet: true,
+    hasCubes: false,
     build: cone,
   },
   sphere: {
@@ -735,6 +749,7 @@ export const SOLIDS: Record<SolidKind, SolidDefinition> = {
     ],
     defaults: { r: 3 },
     hasNet: false,
+    hasCubes: false,
     build: sphere,
   },
   logoSlab: {
@@ -773,9 +788,28 @@ export const SOLIDS: Record<SolidKind, SolidDefinition> = {
     // V = 88 + 6.5π.
     defaults: { m: 4, r: 1, b: 1.5, h: 2 },
     hasNet: true,
+    hasCubes: false,
     build: logoSlab,
   },
 };
+
+/**
+ * Whether a solid can be shown in a view. Every solid can be shown whole; the
+ * other views each hold only for the solids they are exact for, and this is
+ * the one place that says which.
+ */
+export function offersView(kind: SolidKind, view: ViewMode): boolean {
+  switch (view) {
+    case "solid":
+      return true;
+    case "cubes":
+      return SOLIDS[kind].hasCubes;
+    case "net":
+      return SOLIDS[kind].hasNet;
+    case "slice":
+      return slicesSolid(kind);
+  }
+}
 
 export function buildSolid(
   kind: SolidKind,

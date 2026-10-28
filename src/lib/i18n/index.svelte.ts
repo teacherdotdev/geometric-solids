@@ -1,5 +1,8 @@
 import { browser } from "$app/environment";
+import type { SliceDirection, SliceHeading } from "$lib/domain/crossSections";
 import type { UnitKey, UnitLabels } from "$lib/domain/format";
+import type { SolidKind } from "$lib/domain/types";
+import { CUBE_EDGE_MESSAGE } from "$lib/domain/unitCubes";
 import { RANGE_MESSAGE, STEP_MESSAGE } from "$lib/domain/validation";
 
 export type LanguageCode = "en" | "es" | "fr";
@@ -13,8 +16,6 @@ const en = {
     "app.pageTitle": "Geometric Solids — surface area and volume",
     "app.description":
       "An interactive lab for exploring surface area and volume.",
-    "rebrand.notice": "ShapeLab is now Geometric Solids!",
-    "rebrand.dismiss": "Close announcement",
     "lab.answersVisible": "Final answers are visible.",
     "lab.answersHidden": "Final answers are hidden.",
     "lab.units": "Units",
@@ -30,10 +31,42 @@ const en = {
     "view.label": "View",
     "view.solid": "Solid",
     "view.net": "Net",
+    "view.cubes": "Cubes",
+    "view.noCubes":
+      "Only a rectangular prism or a cube can be built exactly from whole unit cubes.",
     "view.noNet.before": "A sphere has ",
     "view.noNet.strong": "no flat net",
     "view.noNet.after":
       ": its surface cannot be flattened without stretching, which is why world maps distort countries.",
+    "view.slice": "Slice",
+    "view.noSlice":
+      "The teacher.dev key's cross sections have no names of their own, so it is not sliced.",
+    "slice.label": "Slice",
+    "slice.direction": "Which way to slice",
+    "slice.horizontal": "Horizontal",
+    "slice.horizontal.hint": "Parallel to the bottom face",
+    "slice.vertical": "Vertical",
+    "slice.vertical.hint": "Perpendicular to the bottom face",
+    "slice.diagonal": "Diagonal",
+    "slice.diagonal.hint": "At 45° to the bottom face",
+    "slice.turn": "Turn the slice a quarter turn. Now {heading}",
+    "slice.heading.frontToBack": "front to back",
+    "slice.heading.sideToSide": "side to side",
+    "slice.heading.right": "rising to the right",
+    "slice.heading.back": "rising to the back",
+    "slice.heading.left": "rising to the left",
+    "slice.heading.front": "rising to the front",
+    "slice.position.sphere": "Height above the lowest point",
+    "slice.position.level": "Height above the bottom face",
+    "slice.position.frontToBack": "Distance in from the left side",
+    "slice.position.sideToSide": "Distance in from the back",
+    "slice.position.diagonal": "Height above the bottom face, at the middle",
+    "slice.handle": "Drag to move the slice. {label}",
+    "slice.drawing":
+      "The cross section, seen face-on: {name}, with sides {sides} {unit}.",
+    "slice.hiddenName": "shape hidden",
+    "slice.side": "Side, {value} {unit}",
+    "slice.area": "Area of the cross section",
     "shape.label": "Solid",
     "measure.dimensions": "Dimensions, in {unit}",
     "measure.show": "{label}. {hint}. Show it on the shape.",
@@ -45,6 +78,7 @@ const en = {
     "validation.number": "Enter a number",
     "validation.range": "Enter a number from 0.1 to 100000",
     "validation.step": "Use steps of 0.1, for example 2.5",
+    "validation.cubes": "Unit cubes need a whole number from 1 to 10",
     "totals.label": "Totals",
     "totals.hidden": "hidden",
     "totals.hideAnswers": "Hide the answers",
@@ -72,6 +106,17 @@ const en = {
     "solid.description":
       "{name} with {dimensions} {unit}. Drag or use the arrow keys to rotate. Point at a face or an edge to measure it.",
     "net.description": "Flat net of the {name}",
+    "cubes.label": "Unit cubes",
+    "cubes.slider": "Unit cubes, from all stacked to all flat",
+    "cubes.stacked": "Stacked",
+    "cubes.flat": "Flat",
+    "cubes.playStack": "Stack the cubes one at a time",
+    "cubes.pause": "Pause",
+    "cubes.playFlatten": "Lay the cubes flat one at a time",
+    "cubes.share": "{percent}% stacked",
+    "cubes.count": "{stacked} of {total} unit cubes stacked",
+    "cubes.description":
+      "{name} built from unit cubes, with {dimensions} {unit}. Its layers can be laid end to end beside it. Drag or use the arrow keys to rotate.",
     "grid.key": "Each grid square is {size} {unit} across",
     "about.pageTitle": "About — Geometric Solids",
     "about.meta":
@@ -169,8 +214,6 @@ const es = {
     "app.pageTitle": "Geometric Solids — área superficial y volumen",
     "app.description":
       "Un laboratorio interactivo para explorar el área superficial y el volumen.",
-    "rebrand.notice": "ShapeLab ahora es Geometric Solids.",
-    "rebrand.dismiss": "Cerrar el aviso",
     "lab.answersVisible": "Las respuestas finales están visibles.",
     "lab.answersHidden": "Las respuestas finales están ocultas.",
     "lab.units": "Unidades",
@@ -186,10 +229,42 @@ const es = {
     "view.label": "Vista",
     "view.solid": "Sólido",
     "view.net": "Red",
+    "view.cubes": "Cubos",
+    "view.noCubes":
+      "Solo un prisma rectangular o un cubo se pueden construir exactamente con cubos unitarios enteros.",
     "view.noNet.before": "Una esfera ",
     "view.noNet.strong": "no tiene una red plana",
     "view.noNet.after":
       ": su superficie no se puede aplanar sin estirarla; por eso los mapas del mundo deforman los países.",
+    "view.slice": "Corte",
+    "view.noSlice":
+      "Las secciones de la tecla de teacher.dev no tienen nombre propio, así que no se corta.",
+    "slice.label": "Corte",
+    "slice.direction": "Hacia dónde cortar",
+    "slice.horizontal": "Horizontal",
+    "slice.horizontal.hint": "Paralelo a la cara inferior",
+    "slice.vertical": "Vertical",
+    "slice.vertical.hint": "Perpendicular a la cara inferior",
+    "slice.diagonal": "Diagonal",
+    "slice.diagonal.hint": "A 45° de la cara inferior",
+    "slice.turn": "Girar el corte un cuarto de vuelta. Ahora {heading}",
+    "slice.heading.frontToBack": "de adelante hacia atrás",
+    "slice.heading.sideToSide": "de lado a lado",
+    "slice.heading.right": "subiendo hacia la derecha",
+    "slice.heading.back": "subiendo hacia atrás",
+    "slice.heading.left": "subiendo hacia la izquierda",
+    "slice.heading.front": "subiendo hacia adelante",
+    "slice.position.sphere": "Altura sobre el punto más bajo",
+    "slice.position.level": "Altura sobre la cara inferior",
+    "slice.position.frontToBack": "Distancia desde el lado izquierdo",
+    "slice.position.sideToSide": "Distancia desde atrás",
+    "slice.position.diagonal": "Altura sobre la cara inferior, en el centro",
+    "slice.handle": "Arrastra para mover el corte. {label}",
+    "slice.drawing":
+      "La sección transversal, vista de frente: {name}, con lados {sides} {unit}.",
+    "slice.hiddenName": "figura oculta",
+    "slice.side": "Lado, {value} {unit}",
+    "slice.area": "Área de la sección transversal",
     "shape.label": "Sólido",
     "measure.dimensions": "Dimensiones, en {unit}",
     "measure.show": "{label}. {hint}. Mostrar en la figura.",
@@ -201,6 +276,8 @@ const es = {
     "validation.number": "Introduce un número",
     "validation.range": "Introduce un número entre 0.1 y 100000",
     "validation.step": "Usa incrementos de 0.1; por ejemplo, 2.5",
+    "validation.cubes":
+      "Los cubos unitarios necesitan un número entero del 1 al 10",
     "totals.label": "Totales",
     "totals.hidden": "oculto",
     "totals.hideAnswers": "Ocultar las respuestas",
@@ -228,6 +305,17 @@ const es = {
     "solid.description":
       "{name} con {dimensions} {unit}. Arrastra o usa las flechas para girarlo. Señala una cara o una arista para medirla.",
     "net.description": "Red plana de {name}",
+    "cubes.label": "Cubos unitarios",
+    "cubes.slider": "Cubos unitarios, de todos apilados a todos extendidos",
+    "cubes.stacked": "Apilados",
+    "cubes.flat": "Extendidos",
+    "cubes.playStack": "Apilar los cubos de uno en uno",
+    "cubes.pause": "Pausa",
+    "cubes.playFlatten": "Extender los cubos de uno en uno",
+    "cubes.share": "{percent} % apilado",
+    "cubes.count": "{stacked} de {total} cubos unitarios apilados",
+    "cubes.description":
+      "{name} construido con cubos unitarios, con {dimensions} {unit}. Sus capas se pueden colocar una tras otra a su lado. Arrastra o usa las flechas para girarlo.",
     "grid.key": "Cada cuadrado de la cuadrícula mide {size} {unit}",
     "about.pageTitle": "Acerca de — Geometric Solids",
     "about.meta":
@@ -275,6 +363,24 @@ const es = {
     Cone: "Cono",
     Sphere: "Esfera",
     "teacher.dev key": "tecla de teacher.dev",
+    Square: "Cuadrado",
+    Rectangle: "Rectángulo",
+    Rhombus: "Rombo",
+    Parallelogram: "Paralelogramo",
+    Trapezoid: "Trapecio",
+    Quadrilateral: "Cuadrilátero",
+    "Equilateral triangle": "Triángulo equilátero",
+    "Right isosceles triangle": "Triángulo rectángulo isósceles",
+    "Isosceles triangle": "Triángulo isósceles",
+    "Right triangle": "Triángulo rectángulo",
+    Triangle: "Triángulo",
+    Pentagon: "Pentágono",
+    Hexagon: "Hexágono",
+    Circle: "Círculo",
+    Ellipse: "Elipse",
+    "Part of an ellipse": "Parte de una elipse",
+    "Parabola region": "Región parabólica",
+    "Hyperbola region": "Región hiperbólica",
     "Top face": "Cara superior",
     "Bottom face": "Cara inferior",
     "Front face": "Cara frontal",
@@ -400,8 +506,6 @@ const fr = {
     "app.pageTitle": "Geometric Solids — aire et volume",
     "app.description":
       "Un laboratoire interactif pour explorer l’aire et le volume.",
-    "rebrand.notice": "ShapeLab s’appelle désormais Geometric Solids.",
-    "rebrand.dismiss": "Fermer l’annonce",
     "lab.answersVisible": "Les réponses finales sont visibles.",
     "lab.answersHidden": "Les réponses finales sont masquées.",
     "lab.units": "Unités",
@@ -418,10 +522,42 @@ const fr = {
     "view.label": "Vue",
     "view.solid": "Solide",
     "view.net": "Patron",
+    "view.cubes": "Cubes",
+    "view.noCubes":
+      "Seuls un pavé droit ou un cube peuvent être construits exactement avec des cubes unités entiers.",
     "view.noNet.before": "Une sphère ",
     "view.noNet.strong": "n’a pas de patron plan",
     "view.noNet.after":
       " : sa surface ne peut pas être aplatie sans être étirée, ce qui explique pourquoi les cartes du monde déforment les pays.",
+    "view.slice": "Coupe",
+    "view.noSlice":
+      "Les sections de la touche teacher.dev n’ont pas de nom propre, elle n’est donc pas coupée.",
+    "slice.label": "Coupe",
+    "slice.direction": "Dans quel sens couper",
+    "slice.horizontal": "Horizontale",
+    "slice.horizontal.hint": "Parallèle à la face du bas",
+    "slice.vertical": "Verticale",
+    "slice.vertical.hint": "Perpendiculaire à la face du bas",
+    "slice.diagonal": "Diagonale",
+    "slice.diagonal.hint": "À 45° de la face du bas",
+    "slice.turn": "Tourner la coupe d’un quart de tour. Maintenant {heading}",
+    "slice.heading.frontToBack": "de l’avant à l’arrière",
+    "slice.heading.sideToSide": "d’un côté à l’autre",
+    "slice.heading.right": "montant vers la droite",
+    "slice.heading.back": "montant vers l’arrière",
+    "slice.heading.left": "montant vers la gauche",
+    "slice.heading.front": "montant vers l’avant",
+    "slice.position.sphere": "Hauteur au-dessus du point le plus bas",
+    "slice.position.level": "Hauteur au-dessus de la face du bas",
+    "slice.position.frontToBack": "Distance depuis le côté gauche",
+    "slice.position.sideToSide": "Distance depuis l’arrière",
+    "slice.position.diagonal": "Hauteur au-dessus de la face du bas, au centre",
+    "slice.handle": "Faites glisser pour déplacer la coupe. {label}",
+    "slice.drawing":
+      "La section, vue de face : {name}, de côtés {sides} {unit}.",
+    "slice.hiddenName": "figure masquée",
+    "slice.side": "Côté, {value} {unit}",
+    "slice.area": "Aire de la section",
     "shape.label": "Solide",
     "measure.dimensions": "Dimensions, en {unit}",
     "measure.show": "{label}. {hint}. Afficher sur la figure.",
@@ -433,6 +569,7 @@ const fr = {
     "validation.number": "Saisissez un nombre",
     "validation.range": "Saisissez un nombre compris entre 0.1 et 100000",
     "validation.step": "Utilisez des pas de 0.1, par exemple 2.5",
+    "validation.cubes": "Les cubes unités demandent un nombre entier de 1 à 10",
     "totals.label": "Totaux",
     "totals.hidden": "masqué",
     "totals.hideAnswers": "Masquer les réponses",
@@ -460,6 +597,17 @@ const fr = {
     "solid.description":
       "{name} avec {dimensions} {unit}. Faites glisser ou utilisez les flèches pour le faire pivoter. Pointez une face ou une arête pour la mesurer.",
     "net.description": "Patron plan de {name}",
+    "cubes.label": "Cubes unités",
+    "cubes.slider": "Cubes unités, de tous empilés à tous étalés",
+    "cubes.stacked": "Empilés",
+    "cubes.flat": "Étalés",
+    "cubes.playStack": "Empiler les cubes un par un",
+    "cubes.pause": "Pause",
+    "cubes.playFlatten": "Étaler les cubes un par un",
+    "cubes.share": "{percent} % empilés",
+    "cubes.count": "{stacked} cubes unités empilés sur {total}",
+    "cubes.description":
+      "{name} construit avec des cubes unités, avec {dimensions} {unit}. Ses couches peuvent être posées bout à bout à côté. Faites-le glisser ou utilisez les flèches pour le tourner.",
     "grid.key": "Chaque carré du quadrillage mesure {size} {unit}",
     "about.pageTitle": "À propos — Geometric Solids",
     "about.meta":
@@ -508,6 +656,24 @@ const fr = {
     Cone: "Cône",
     Sphere: "Sphère",
     "teacher.dev key": "touche teacher.dev",
+    Square: "Carré",
+    Rectangle: "Rectangle",
+    Rhombus: "Losange",
+    Parallelogram: "Parallélogramme",
+    Trapezoid: "Trapèze",
+    Quadrilateral: "Quadrilatère",
+    "Equilateral triangle": "Triangle équilatéral",
+    "Right isosceles triangle": "Triangle rectangle isocèle",
+    "Isosceles triangle": "Triangle isocèle",
+    "Right triangle": "Triangle rectangle",
+    Triangle: "Triangle",
+    Pentagon: "Pentagone",
+    Hexagon: "Hexagone",
+    Circle: "Cercle",
+    Ellipse: "Ellipse",
+    "Part of an ellipse": "Partie d’une ellipse",
+    "Parabola region": "Région parabolique",
+    "Hyperbola region": "Région hyperbolique",
     "Top face": "Face supérieure",
     "Bottom face": "Face inférieure",
     "Front face": "Face avant",
@@ -691,9 +857,23 @@ export function unitLabels(key: UnitKey): UnitLabels {
   return current().units[key] ?? en.units[key];
 }
 
+/** What the slice position measures, for a solid sliced the way it is. */
+export function slicePositionLabel(
+  kind: SolidKind,
+  direction: SliceDirection,
+  heading: SliceHeading,
+): string {
+  if (kind === "sphere") return t("slice.position.sphere");
+  if (direction === "diagonal") return t("slice.position.diagonal");
+  if (heading === "frontToBack") return t("slice.position.frontToBack");
+  if (heading === "sideToSide") return t("slice.position.sideToSide");
+  return t("slice.position.level");
+}
+
 export function validationMessage(message: string): string {
   if (message === RANGE_MESSAGE) return t("validation.range");
   if (message === STEP_MESSAGE) return t("validation.step");
+  if (message === CUBE_EDGE_MESSAGE) return t("validation.cubes");
   if (message === "Enter a number") return t("validation.number");
   return message;
 }

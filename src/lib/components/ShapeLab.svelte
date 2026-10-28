@@ -1,5 +1,8 @@
 <script lang="ts">
   import BrandChip from "$lib/components/BrandChip.svelte";
+  import CubeControls from "$lib/components/CubeControls.svelte";
+  import CrossSectionView from "$lib/components/CrossSectionView.svelte";
+  import CubeView from "$lib/components/CubeView.svelte";
   import FloatControl from "$lib/components/FloatControl.svelte";
   import FoldTransition from "$lib/components/FoldTransition.svelte";
   import GridKey from "$lib/components/GridKey.svelte";
@@ -8,15 +11,19 @@
   import NetView from "$lib/components/NetView.svelte";
   import RotationControls from "$lib/components/RotationControls.svelte";
   import ShapeBar from "$lib/components/ShapeBar.svelte";
+  import SliceControls from "$lib/components/SliceControls.svelte";
   import SolidView from "$lib/components/SolidView.svelte";
   import TotalsCard from "$lib/components/TotalsCard.svelte";
   import ViewToggle from "$lib/components/ViewToggle.svelte";
   import { UNIT_ORDER } from "$lib/domain/format";
+  import { DIMENSION_MAX } from "$lib/domain/types";
   import type { UnitKey } from "$lib/domain/format";
   import type { SolidKind } from "$lib/domain/types";
   import { t, unitLabels } from "$lib/i18n/index.svelte";
   import type { LabState, ViewMode } from "$lib/state/lab.svelte";
+  import { fitFraction } from "$lib/ui/grid";
   import { measureBox } from "$lib/ui/measureBox";
+  import { stageRoom } from "$lib/ui/stage";
 
   let {
     lab,
@@ -56,7 +63,9 @@
   let foldingKind = $state<SolidKind | null>(null);
 
   function changeView(view: ViewMode) {
-    if (view === lab.view || reducedMotion || !lab.net) {
+    // Only the net folds; the cubes take over from the solid in place.
+    const folds = view === "net" || lab.view === "net";
+    if (view === lab.view || reducedMotion || !lab.net || !folds) {
       folding = null;
       lab.setView(view);
       return;
@@ -111,6 +120,47 @@
   /** What the panels cost the drawing altogether, top and bottom. */
   const chrome = $derived(floating ? topHeight + bottomHeight : 0);
 
+  // The slice view's round window hangs at the right edge, between the view
+  // controls above it and the row of panels along the bottom. The whole row
+  // counts, not just the answers: on a phone the row stacks into a column.
+  let stageWidth = $state(0);
+  let stageHeight = $state(0);
+  /** The free band down the right edge, in pixels from the top of the window. */
+  const portholeTop = $derived(8 + topHeight + 8);
+  const portholeRoom = $derived(
+    Math.max(0, stageHeight - portholeTop - (8 + bottomHeight + 8)),
+  );
+  /** What the card hanging under the window takes, before it opens up. */
+  const CARD_ROOM = 64;
+  /** Room around the solid's extent in the window, for the side lengths. */
+  const LABEL_ROOM = 28;
+  /** The gaps either side of the window: to the solid, and to the edge. */
+  const PORTHOLE_GAPS = 24;
+  /**
+   * How far from its centre the solid reaches on screen, in pixels. The cut in
+   * the window is drawn at the same scale as the solid, so the window has to
+   * hold the solid's whole extent, and the solid has the width beside it. The
+   * solid is fitted as the Solid view fits it, to whichever is tightest: the
+   * width left of the window, the height, or a window as tall as the band.
+   */
+  const sliceReach = $derived.by(() => {
+    const share = 0.78 * fitFraction(lab.mesh.extent, DIMENSION_MAX);
+    const widthFit =
+      (share * (stageWidth - 2 * LABEL_ROOM - PORTHOLE_GAPS)) /
+      (2 * (1 + share));
+    const heightFit = share * stageRoom(stageHeight, chrome);
+    const bandFit = (portholeRoom - CARD_ROOM) / 2 - LABEL_ROOM;
+    return Math.max(24, Math.min(widthFit, heightFit, bandFit));
+  });
+  const portholeDiameter = $derived(2 * (sliceReach + LABEL_ROOM));
+  /** The solid's scale, which the window shares. */
+  const slicePixels = $derived(sliceReach / lab.mesh.extent);
+  /**
+   * The solid moves left by half of what the window takes, so it sits in the
+   * middle of the width left beside it rather than under it.
+   */
+  const portholeShift = $derived((portholeDiameter + PORTHOLE_GAPS) / 2);
+
   // The widths along the bottom edge, for deciding whether the view controls
   // can keep the row with the panels either side of them.
   let rowWidth = $state(0);
@@ -149,6 +199,10 @@
 <div
   class="relative h-[100dvh] w-full overflow-hidden bg-gradient-to-b from-paper to-accent-soft/50"
   data-ready={ready ? "true" : undefined}
+  use:measureBox={(width, height) => {
+    stageWidth = width;
+    stageHeight = height;
+  }}
 >
   <h1 class="sr-only">{t("app.name")}</h1>
 
@@ -173,6 +227,47 @@
         {lab}
         net={lab.net}
         compact={floating}
+        {lift}
+        {chrome}
+        onGrid={(step) => (gridStep = step)}
+      />
+    {:else if lab.view === "slice" && lab.section}
+      <!-- The solid with its cut keeps the stage, moved over to the left; the
+           cut itself, face-on, is a round window beside it on the right, in
+           the band the panels along the top and bottom leave free. -->
+      <SolidView
+        {lab}
+        {reducedMotion}
+        {animationWindow}
+        compact={floating}
+        {lift}
+        {chrome}
+        shift={portholeShift}
+        pixelsPerUnit={slicePixels}
+        onGrid={(step) => (gridStep = step)}
+      />
+      <!-- Above the panels along the bottom: the card under the window opens
+           downward to show its working, and may then reach over them. -->
+      <div
+        class="pointer-events-none absolute right-2 z-30 flex items-center"
+        style:top="{portholeTop}px"
+        style:height="{portholeRoom}px"
+        style:padding-bottom="{CARD_ROOM}px"
+      >
+        <CrossSectionView
+          {lab}
+          section={lab.section}
+          scale={slicePixels}
+          diameter={portholeDiameter}
+          compact={floating}
+        />
+      </div>
+    {:else if lab.view === "cubes" && lab.cubes}
+      <CubeView
+        {lab}
+        box={lab.cubes}
+        {reducedMotion}
+        {animationWindow}
         {lift}
         {chrome}
         onGrid={(step) => (gridStep = step)}
@@ -214,31 +309,42 @@
   </div>
 
   <!-- Top right: which view, what the numbers are called, and whether the lab
-       floats over other tabs. The row wraps in a small floating window. -->
+       floats over other tabs. The row wraps in a small floating window. In the
+       cubes view the player for the cubes hangs under it, and in the slice
+       view the controls for the cutting plane. -->
   <div
-    class="pointer-events-none absolute top-2 right-2 z-20 flex flex-wrap justify-end gap-1.5 sm:max-w-none {floating
-      ? 'max-w-[min(22rem,62vw)]'
-      : 'max-w-[16rem]'}"
+    class="pointer-events-none absolute top-2 right-2 z-20 flex flex-col items-end gap-1.5"
     use:measureBox={(_width, height) => (topHeight = height)}
   >
-    {#if onFloat}
-      <FloatControl supported={floatSupported} onToggle={onFloat} />
-    {/if}
-    <ViewToggle {lab} onViewChange={changeView} />
-    <label class="sr-only" for="unit-select">{t("lab.units")}</label>
-    <select
-      id="unit-select"
-      data-testid="unit-select"
-      class="pointer-events-auto cursor-pointer rounded-xl border border-rule/70 bg-panel/85 px-2 py-1 text-xs font-bold shadow-lg shadow-ink/10 backdrop-blur-md"
-      value={lab.unit}
-      onchange={(event) => (lab.unit = event.currentTarget.value as UnitKey)}
+    <div
+      class="flex flex-wrap justify-end gap-1.5 sm:max-w-none {floating
+        ? 'max-w-[min(22rem,62vw)]'
+        : 'max-w-[14rem]'}"
     >
-      {#each UNIT_ORDER as key (key)}
-        <option value={key}>{unitLabels(key).linear}</option>
-      {/each}
-    </select>
-    {#if !floating}
-      <LanguagePicker />
+      {#if onFloat}
+        <FloatControl supported={floatSupported} onToggle={onFloat} />
+      {/if}
+      <ViewToggle {lab} onViewChange={changeView} />
+      <label class="sr-only" for="unit-select">{t("lab.units")}</label>
+      <select
+        id="unit-select"
+        data-testid="unit-select"
+        class="pointer-events-auto cursor-pointer rounded-xl border border-rule/70 bg-panel/85 px-2 py-1 text-xs font-bold shadow-lg shadow-ink/10 backdrop-blur-md"
+        value={lab.unit}
+        onchange={(event) => (lab.unit = event.currentTarget.value as UnitKey)}
+      >
+        {#each UNIT_ORDER as key (key)}
+          <option value={key}>{unitLabels(key).linear}</option>
+        {/each}
+      </select>
+      {#if !floating}
+        <LanguagePicker />
+      {/if}
+    </div>
+    {#if lab.view === "cubes"}
+      <CubeControls {lab} />
+    {:else if lab.view === "slice" && lab.section}
+      <SliceControls {lab} />
     {/if}
   </div>
 
@@ -288,7 +394,10 @@
       <!-- Measured on the controls themselves: the box around them is a full
            row wide while they are on a line of their own, and would then never
            be found to fit. -->
-      <div use:measureBox={(width) => (middleWidth = width)}>
+      <div
+        class="flex flex-col items-center gap-1.5"
+        use:measureBox={(width) => (middleWidth = width)}
+      >
         <RotationControls {lab} {reducedMotion} compact={floating} />
       </div>
     </div>

@@ -17,12 +17,13 @@ The originating teacher request was for a rotating 3D shape app with editable le
 | Solids | Rectangular prism, cube, right-triangular prism, square pyramid, cylinder, cone, sphere |
 | Manipulation | Rotatable 3D solids with editable relevant dimensions |
 | Calculation | Live formulas, substituted dimensions, and final results |
-| Answer reveal | Hide final numerical results only; formulas and substituted dimensions remain visible |
+| Answer reveal | Hide final answers only — numerical results, and a cross section's name; formulas, substituted dimensions and side lengths remain visible |
 | Surface explanation | Highlight individual faces or curved surfaces and relate them to the surface-area calculation |
 | Nets | Toggle between a solid and its accurately scaled flat net, not animated unfolding or side-by-side views |
 | Triangular prism | Right-triangle base; enter both perpendicular legs and prism length |
 | π | Show exact π expressions and an approximate decimal using calculator π, not 3.14 |
-| Volume visualization | Unit-cube fills and cross-sectional layer animations are not part of the selected launch scope |
+| Volume visualization | A Cubes view shows a rectangular prism or cube as unit cubes that move between the solid and a flat arrangement of its layers (added after launch at a teacher's request; see [Show a solid in unit cubes](#show-a-solid-in-unit-cubes)) |
+| Cross sections | A Slice view cuts a solid with a horizontal, vertical or 45° diagonal cutting plane and draws the cross section face-on with its name, side lengths and area (added after launch at a teacher's request; see [Slice a solid](#slice-a-solid)). It is about the 2D shape, not about building up volume |
 | Textbook workflow | Let the teacher float the interactive lab above a textbook in another tab |
 
 ## Proposed defaults
@@ -76,6 +77,54 @@ These are implementation recommendations, not separately confirmed requirements.
 - A sphere cannot have an exact flat net without distortion. Explain this explicitly; do not display a misleading net. Its 3D view and calculations remain available.
 - Auto-rotation does not run while showing a net.
 
+### Show a solid in unit cubes
+
+Students build their sense of volume by counting unit cubes, and adjustable
+pictures of the same solid whole and in cubes are hard to come by.
+
+- A **Cubes** tab sits between Solid and Net. It is offered only for the rectangular prism and the cube, which whole unit cubes fill exactly; on any other solid it is greyed out with a one-line reason, and choosing such a solid while in Cubes returns to the Solid view.
+- Entering Cubes rounds each edge to the nearest whole number (halves up, at least 1) and caps it at 10, visibly in the dimension bar. The change stays after leaving. While in Cubes, the dimension controls step by 1 and a typed edge that is not a whole number from 1 to 10 is refused with an input error.
+- Exactly V unit cubes are on screen at all times. Each is either stacked in the solid or lying in the **flat arrangement**: the solid's layers laid end to end along its length, beside the solid after a one-unit gap, making one layer h·l long and w wide. A faint outline of the solid and a faint footprint of the flat arrangement are always shown.
+- The fill — how many cubes are stacked — starts full. The cube controls sit in the top right, under the view tabs: a slider running from all stacked at the left to all flat at the right, a cube per step, that can be dragged either way; under it, a play button pointing each way with pause between them. Playing left moves cubes into the solid one at a time along a row, row by row across a layer, then layer by layer upward; playing right takes them out again in reverse. Either runs at 4 cubes per second whatever the size of the solid, until paused or the end is reached. With reduced motion, play moves a layer per step. The slider runs over the share of cubes flat rather than a count, so its accessible value gives away no volume while answers are hidden.
+- Layers alternate between two shades in both arrangements, so a layer can be recognised after it moves.
+- The solid's edges are labelled l, w and h (s for a cube). The flat arrangement is not labelled.
+- While answers are visible, a count reads "24 of 60 unit cubes stacked". While they are hidden there is no count and no total anywhere, including accessible descriptions.
+- Both totals stay in their corner. Surface badges and surface measurement are not shown. The floor grid is fixed at one unit, so each square is one cube's footprint.
+- Drag, keyboard rotation and reset work as in the Solid view. Auto-rotation is turned off, and unavailable, while every cube lies flat.
+- Changing a dimension keeps a full solid full and an empty one empty; a part-filled solid keeps its count, capped at the new total. Coming back to Cubes starts full.
+
+### Slice a solid
+
+Students describe the two-dimensional figures that result from slicing
+three-dimensional figures (CCSS 7.G.A.3), and a cut is hard to show with a
+real solid. A teacher asked to slice the shapes parallel to the base,
+perpendicular to it, or at a diagonal.
+
+- A **Slice** tab sits after Net: Solid | Cubes | Net | Slice. It is offered for all seven picker solids. The logo solid's Slice tab is greyed out with a one-line reason, and choosing the logo while in Slice returns to the Solid view.
+- Directions are measured against the solid's **bottom face**, the face it stands on. For the triangular prism that is the leg-a rectangle, not one of its triangular bases, so its horizontal slices are rectangles.
+- Three buttons choose the **slice direction**: **Horizontal**, **Vertical** and **Diagonal**. Their hints and accessible descriptions say "parallel to the bottom face" and "perpendicular to the bottom face". Vertical has two headings (front to back, side to side) and Diagonal four (a 45° plane leaning toward the front, back, left or right); a turn button steps through them. The same seven slices are offered on every solid; on the cylinder and cone the four diagonals give the same cross section, which is itself worth noticing. The sphere has no direction controls, because every slice of a sphere is a circle.
+- A double-headed **arrow** at the middle of the cross section moves the cutting plane along one axis, in the solid's units and steps of 0.1. Dragging it moves the plane along the arrow, at the pace of the pointer; only the part of a drag along the arrow counts, so dragging the arrow never turns the solid. It is a focusable slider: the arrow keys step it by 0.1, Page Up and Page Down by 1, Home and End to either end. There is no other slider or typed entry for the position. What it measures is part of the arrow's accessible name:
+  - Horizontal: height above the bottom face.
+  - Vertical: distance in from the side.
+  - Diagonal: the plane moves straight up and down, so the arrow points up. The position is the height above the bottom face at which the plane crosses the line up the middle of the solid, where the arrow is: 0 where that crossing is on the ground. The plane first touches the solid at the bottom edge, or the foot of the rim, on the side it rises toward, and then crosses the middle below the bottom face, so a diagonal's position starts below 0: half the side for a cube, minus the radius for a cylinder or cone.
+  - Sphere: height above its lowest point.
+
+  The position is drawn on the solid as a measured line along the arrow, through the middle of the solid: from the bottom face (or the left or back side) to the arrow. Below 0 it runs down from the bottom face to the arrow under it. The 90° or 45° angle between the cutting plane and the bottom face is marked.
+- The arrow stops just short of both ends, where the plane would only touch the solid at a point, an edge or a face, so there is always a real cross section. Changing direction, heading, solid or dimensions keeps the position, pulled back into range when it no longer fits. Slice opens on Horizontal at half height.
+- On the solid, the cutting plane is drawn see-through and the cross section is outlined where it meets the surface. The solid is not cut apart. Drag, keyboard rotation and reset work as in the Solid view and the plane turns with the solid; auto-rotation is turned off.
+- The solid and its plane keep the stage, moved over to the left. The **cross-section drawing** is a round window beside it at the right edge, in the band between the view controls and the panels along the bottom, sized to fit it on a phone as in the floating window. The drawing is the cross section seen face-on, at exactly the solid's scale and on the same grid, so one key to the grid serves both and a slice near a tip comes out small. The cut is centred in the window on the middle of the box around it, so it grows and shrinks straight about its own middle as the plane moves; a curved cut that would reach outside the window from there is moved just enough toward the centre of the smallest circle around it to fit. The window is made big enough to hold the solid's whole extent at that scale, so every cut fits in it; the solid and the window are fitted together to the width and the band.
+- The slice controls hang under the view controls in the top right, as the cube player does in the Cubes view. They hold only the three direction buttons and, where the direction has more than one heading, a round turn button; what the position measures is said by the arrow on the solid. The sphere has no slice controls.
+- The drawing always shows:
+  - the cross section's most specific name: square rather than rectangle; equilateral, isosceles or right triangle where true, otherwise triangle; trapezoid; circle, ellipse, part of an ellipse, parabola region, hyperbola region. These slice directions never give a pentagon or hexagon;
+  - a length on every straight side;
+  - on a curved cross section, the radius, the two axes of an ellipse, or the width and height of a region;
+  - its area, in a card hanging from the bottom of the window.
+- The window never changes when something is pointed at, in it or on the solid. Pointing at a length in it lights the matching segment of the outline on the solid; clicking keeps it lit. Pointing at, focusing or clicking the area card shows the formula and substitution under the area, with the height line that ½bh or ½(b₁ + b₂)h needs drawn in, and lights the cut on the solid; the card opens downward and the window stays where it is. Each length and the card are focusable badges, so every measurement is reachable without a pointer.
+- Area formulas: the standard formula wherever there is one (lw, s², ½bh, ½(b₁ + b₂)h, πr², πab). A parabola region uses Archimedes' ⅔wh. Part of an ellipse and a hyperbola region show an approximate area only, with no formula and a note that working it out needs mathematics beyond this course.
+- Numbers follow the rest of the app: exact with an approximation beside it, and approximate only where the app cannot write an exact value — mainly cylinder and cone slices that cut through a disk.
+- While answers are hidden, the cross section's name and its evaluated area are hidden everywhere, including accessible descriptions; side lengths, formulas and substitutions stay visible.
+- Both totals stay in their corner, and slicing never changes them.
+
 ### Float over a textbook
 
 - A `Float` control opens the complete interactive lab in a browser-managed, always-on-top window so the teacher can switch to a textbook tab without losing the lab.
@@ -90,6 +139,7 @@ These are implementation recommendations, not separately confirmed requirements.
 - General formulas and substitutions remain available for student discussion: per surface in its measurement, and for the totals behind the `fx` control beside them.
 - While hidden, neither the exact nor approximate final result is exposed in tooltips, accessible labels, or alternate views.
 - Avoid completed numerical face-area subtotals while answers are hidden; surface names and unevaluated expressions remain available.
+- In the Slice view the cross section's name counts as an answer and hides with the results; its side lengths do not.
 - Revealing answers displays the current geometry's results, not stale values.
 
 ## Acceptance examples
@@ -104,6 +154,16 @@ These are implementation recommendations, not separately confirmed requirements.
 - Entering an empty, zero, negative, out-of-range, or nonfinite dimension never produces a malformed solid or NaN result. Show an input error and retain the last valid geometry.
 - Changing shape or view while answers are hidden does not reveal a final result.
 - Floating the lab, changing a dimension there, and returning it to the tab preserves the changed geometry and results.
+- A 3 × 4 × 5 rectangular prism in Cubes shows 60 unit cubes; laid flat they form one 15 × 4 layer of the same 60 cubes.
+- Entering Cubes with a 3.5 × 40 × 5 prism changes it to 4 × 10 × 5, which shows 200 cubes.
+- A square pyramid with base side 6 and height 4, sliced horizontally at height 2, gives a 3 × 3 square of area 9.
+- The same pyramid sliced vertically 3 in from the side, through its tip, gives an isosceles triangle with sides 6, 5 and 5, height 4 and area 12; 1 in from the side it gives a trapezoid with parallel sides 6 and 4, height 4/3 and area 20/3.
+- A 3 × 4 × 5 rectangular prism sliced horizontally at any height gives a rectangle equal to its bottom face.
+- A cube with side 2 sliced diagonally through opposite edges (position 1) gives a 2 × 2√2 rectangle of area 4√2 ≈ 5.66.
+- A right-triangular prism with legs 3 and 4 and length 5, sliced across its length, gives a right triangle with sides 3, 4 and 5 and area 6; sliced horizontally at height 2 it gives a 1.5 × 5 rectangle of area 7.5.
+- A cylinder with radius 1 and height 4 sliced diagonally through its centre (position 2) gives an ellipse with axes 2 and 2√2 and area √2π ≈ 4.44. A cylinder with radius 2 and height 3 sliced diagonally through its centre gives part of an ellipse, with an approximate area only.
+- A sphere with radius 3 sliced at height 1 gives a circle of radius √5 and area 5π ≈ 15.71.
+- With answers hidden, the Slice view shows the cross section's side lengths and formula but not its name or evaluated area.
 - Every essential action can be performed without a mouse.
 
 ## Implementation constraints
@@ -117,21 +177,28 @@ Built as a single prerendered SvelteKit page.
 - `src/lib/domain/` holds the pure model: exact rational/radical/π arithmetic
   (`rational.ts`, `exact.ts`), the seven picker solids and their surface decomposition
   (`solids.ts`), 3D meshes and measurable edges (`geometry3d.ts`), net layouts
-  (`nets.ts`), input validation (`validation.ts`), and unit labels
+  (`nets.ts`), unit-cube layout and fill steps (`unitCubes.ts`), cross
+  sections (`crossSections.ts`: exact plane cuts of the polyhedra, and
+  analytic ones of the cylinder, cone and sphere), input
+  validation (`validation.ts`), and unit labels
   (`format.ts`). None of it imports Svelte, and it is covered by
   `src/lib/domain/*.test.ts`.
 - `src/lib/state/lab.svelte.ts` keeps geometry, input drafts, and presentation
   state separate, as described in [domain-model.md](domain-model.md). What is
-  being measured is a hovered or pinned _target_: one surface, or one length
-  that every edge carrying it responds to.
-- `src/lib/components/` renders the solid and the net as accessible SVG. The
+  being measured is a hovered or pinned _target_: one surface, one length
+  that every edge carrying it responds to, or one side of the cross section
+  (or the whole of it), on both of the slice view's drawings at once.
+- `src/lib/components/` renders the solid, its unit cubes (`CubeView.svelte`),
+  the net, and in the slice view the see-through solid under a round window
+  holding the face-on cross section (`CrossSectionView.svelte`, with `SliceControls.svelte`) as
+  accessible SVG. The
   shape fills the screen; four small panels float over it — the solid picker
   top left, the view, unit, and floating-window controls top right, the
   dimensions bottom left, and the two totals bottom right. `ShapeLab.svelte`
   mounts the same stateful experience in the page or in a Document
   Picture-in-Picture window.
-- `tests/shape-lab.spec.ts` covers the browser behaviour listed in the domain
-  model's verification section.
+- `tests/geometric-solids.spec.ts` covers the browser behaviour listed in the
+  domain model's verification section.
 
 Run it with the workspace allocator, never a bare `bun run dev`:
 

@@ -1,5 +1,7 @@
 <script lang="ts">
+  import Floor from "$lib/components/Floor.svelte";
   import MathText from "$lib/components/MathText.svelte";
+  import { clampToRange } from "$lib/domain/crossSections";
   import { evalExact, formatExact } from "$lib/domain/exact";
   import { approximateText, formatApproximate } from "$lib/domain/format";
   import {
@@ -11,9 +13,15 @@
     type Vec3,
   } from "$lib/domain/geometry3d";
   import { DIMENSION_MAX } from "$lib/domain/types";
-  import { domainText, t, unitLabels } from "$lib/i18n/index.svelte";
+  import {
+    domainText,
+    slicePositionLabel,
+    t,
+    unitLabels,
+  } from "$lib/i18n/index.svelte";
   import {
     measureTarget,
+    sectionTarget,
     surfaceTarget,
     type LabState,
     type Target,
@@ -26,7 +34,7 @@
     LOGO_MARK_TICK,
     logoMarkTransform,
   } from "$lib/ui/logoMark";
-  import { floorPlane, floorRules } from "$lib/ui/floor";
+  import { floorPlane } from "$lib/ui/floor";
   import { fitFraction, gridLayers, gridScale } from "$lib/ui/grid";
   import { measureBox } from "$lib/ui/measureBox";
   import { stageRise, stageRoom } from "$lib/ui/stage";
@@ -38,6 +46,8 @@
     compact = false,
     lift = 0,
     chrome = 0,
+    shift = 0,
+    pixelsPerUnit,
     onGrid,
   }: {
     lab: LabState;
@@ -57,6 +67,17 @@
      * window shrunk around it gives up shape rather than burying it.
      */
     chrome?: number;
+    /**
+     * How far left of the middle to hold the shape, in CSS pixels, for a
+     * drawing that shares the window with something along its right edge. The
+     * shape is fitted to what is left of the width beside it.
+     */
+    shift?: number;
+    /**
+     * A scale set by the lab rather than fitted here, for a drawing whose size
+     * has to agree with another one beside it.
+     */
+    pixelsPerUnit?: number;
     /**
      * Where to report the size of one grid square, in the shape's own units.
      * The step is settled here, out of the fit to this element, but it is read
@@ -89,15 +110,18 @@
   const room = $derived(stageRoom(boxHeight, chrome));
   /** Where the middle of the shape lands, measured down from the top edge. */
   const centerY = $derived(halfHeight - rise);
+  /** Where the middle of the shape lands, measured in from the left edge. */
+  const centerX = $derived(halfWidth - Math.min(shift, halfWidth / 2));
   /** The extent of the largest solid the sliders reach: a sphere of radius 20. */
   const FULL_EXTENT = DIMENSION_MAX;
   const scale = $derived(
-    // The fit is measured against the clear band, not the window, so the solid
-    // grows into the room it actually has.
-    (Math.min(halfWidth, room) *
-      0.78 *
-      fitFraction(lab.mesh.extent, FULL_EXTENT)) /
-      lab.mesh.extent,
+    pixelsPerUnit ??
+      // The fit is measured against the clear band, not the window, so the
+      // solid grows into the room it actually has.
+      (Math.min(centerX, room) *
+        0.78 *
+        fitFraction(lab.mesh.extent, FULL_EXTENT)) /
+        lab.mesh.extent,
   );
 
   /**
@@ -116,9 +140,6 @@
   $effect(() => {
     onGrid?.(grid.step);
   });
-
-  const FLOOR_MASK_ID = "floor-reach";
-  const FLOOR_FADE_ID = "floor-fade";
 
   /**
    * The foot of the solid. Every mesh is built around its own centre, so this
@@ -175,8 +196,19 @@
     compact ? unitLabels(lab.unit).areaShort : unitLabels(lab.unit).area,
   );
 
+  /**
+   * In the slice view the solid is drawn see-through, so the cross section can
+   * be seen inside it. Every solid here is convex, so the cross section always
+   * lies behind the faces turned toward the viewer and in front of the ones
+   * turned away: drawing the far faces, then the cross section, then the near
+   * faces faintly over it puts everything in the right order without sorting.
+   */
+  const section = $derived(lab.view === "slice" ? lab.section : null);
+
   interface DrawnFacet {
     surfaceId: string;
+    /** Turned away from the viewer: only drawn while the solid is see-through. */
+    far: boolean;
     points: string;
     fill: string;
     stroke: string;
@@ -193,8 +225,11 @@
       );
       const normal = normalOf(rotated);
       const length = Math.hypot(normal[0], normal[1], normal[2]);
-      // Back faces of a closed convex solid are never visible.
-      if (length === 0 || normal[2] / length <= 1e-6) continue;
+      if (length === 0) continue;
+      // Back faces of a closed convex solid are never visible, unless the
+      // solid is see-through.
+      const far = normal[2] / length <= 1e-6;
+      if (far && !section) continue;
 
       const unit: Vec3 = [
         normal[0] / length,
@@ -212,6 +247,7 @@
       const fill = facetFill(hue, diffuse, lab.definition.baseHue ?? null);
       drawn.push({
         surfaceId: facet.surfaceId,
+        far,
         points: projected
           .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`)
           .join(" "),
@@ -225,6 +261,143 @@
       });
     }
     return drawn.sort((a, b) => a.depth - b.depth);
+  });
+
+  const nearFacets = $derived(facets.filter((facet) => !facet.far));
+  const farFacets = $derived(facets.filter((facet) => facet.far));
+
+  function projectAll(points: readonly Vec3[]): string {
+    return points
+      .map((point) => {
+        const [x, y] = projectPoint(
+          rotatePoint(point, lab.yaw, lab.pitch),
+          scale,
+        );
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(" ");
+  }
+
+  /**
+   * The cutting plane and where it meets the solid, projected. The plane is
+   * drawn as a sheet a little wider than the solid, so it reads as a flat cut
+   * running right through it rather than as a face of its own.
+   */
+  const slicing = $derived.by(() => {
+    if (!section) return null;
+    const { origin, across, up } = section.plane;
+    // The sheet and its arrow hang where the plane crosses the line through
+    // the middle of the solid along the way it moves, where the position is
+    // measured, not on the middle of the cut: that shifts sideways as the cut
+    // changes shape, which would make a diagonal slice look as if it slid
+    // along its slope rather than rising straight up.
+    const anchor = section.travel.to3d;
+    // Wide enough to run right through the solid from wherever it hangs.
+    const reachOut =
+      lab.mesh.extent * 1.35 +
+      Math.hypot(
+        anchor[0] - origin[0],
+        anchor[1] - origin[1],
+        anchor[2] - origin[2],
+      );
+    const corner = (i: number, j: number): Vec3 => [
+      anchor[0] + (across[0] * i + up[0] * j) * reachOut,
+      anchor[1] + (across[1] * i + up[1] * j) * reachOut,
+      anchor[2] + (across[2] * i + up[2] * j) * reachOut,
+    ];
+    const at = (point: Vec3) =>
+      projectPoint(rotatePoint(point, lab.yaw, lab.pitch), scale);
+    const along = (from: Vec3, direction: Vec3, length: number): Vec3 => [
+      from[0] + direction[0] * length,
+      from[1] + direction[1] * length,
+      from[2] + direction[2] * length,
+    ];
+
+    // What the position measures: a dashed line up the arrow's line, from
+    // where the plane crossed it on first touching the solid to the arrow.
+    const from = at(section.travel.from3d);
+    const to = at(section.travel.to3d);
+
+    // The angle the plane makes with the bottom face, opening from the floor
+    // up the plane: a square for a right angle, an arc for 45°.
+    let angle = null;
+    if (section.angle) {
+      const { at: corner3d, floor, rise, degrees } = section.angle;
+      const arm = lab.mesh.extent * 0.32;
+      const mark = arm * 0.45;
+      const blend = (share: number): Vec3 => {
+        const mixed: Vec3 = [
+          floor[0] * (1 - share) + rise[0] * share,
+          floor[1] * (1 - share) + rise[1] * share,
+          floor[2] * (1 - share) + rise[2] * share,
+        ];
+        const length = Math.hypot(...mixed);
+        return [mixed[0] / length, mixed[1] / length, mixed[2] / length];
+      };
+      const arc =
+        degrees === 90
+          ? [
+              along(corner3d, floor, mark),
+              along(along(corner3d, floor, mark), rise, mark),
+              along(corner3d, rise, mark),
+            ]
+          : Array.from({ length: 9 }, (_, i) =>
+              along(corner3d, blend(i / 8), mark),
+            );
+      angle = {
+        arms: projectAll([
+          along(corner3d, floor, arm),
+          corner3d,
+          along(corner3d, rise, arm),
+        ]),
+        arc: projectAll(arc),
+        label: at(along(corner3d, blend(0.5), arm * 0.8)),
+        degrees,
+      };
+    }
+
+    // The arrow that moves the plane, pointing the way it moves, so it only
+    // ever travels along itself. Seen almost end-on that way is too short on
+    // screen to drag along at the pointer's pace, so a drag there takes more
+    // pixels.
+    const middle = at(anchor);
+    const ahead = at(along(anchor, section.slide, 1));
+    const step = [ahead[0] - middle[0], ahead[1] - middle[1]];
+    const length = Math.hypot(step[0], step[1]);
+    const direction: [number, number] =
+      length < 1e-6 ? [0, -1] : [step[0] / length, step[1] / length];
+    const handle = {
+      at: middle,
+      direction,
+      pixelsPerUnit: Math.max(length, scale * 0.35),
+      degrees: (Math.atan2(direction[1], direction[0]) * 180) / Math.PI,
+    };
+
+    return {
+      handle,
+      sheet: projectAll([
+        corner(-1, -1),
+        corner(1, -1),
+        corner(1, 1),
+        corner(-1, 1),
+      ]),
+      outline: projectAll(section.outline3d),
+      travel: { from, to }, // Each side of the cut, so it can be pointed at here and light up on the
+      // face-on drawing, and the other way round.
+      sides: section.edges.map((edge) => {
+        const [x1, y1] = at(edge.from3d);
+        const [x2, y2] = at(edge.to3d);
+        const target = sectionTarget(edge.id);
+        return { id: edge.id, target, x1, y1, x2, y2 };
+      }),
+      heights: section.lines.map((line) => {
+        const [x1, y1] = at(line.from3d);
+        const [x2, y2] = at(line.to3d);
+        return { id: line.id, always: line.always, x1, y1, x2, y2 };
+      }),
+
+      angle,
+    };
   });
 
   /**
@@ -309,6 +482,9 @@
       running.y += facet.center[1] * facet.area;
       running.area += facet.area;
     }
+    // A see-through solid is there to show the cut; its faces are not what is
+    // being measured.
+    if (section) return [];
     return lab.model.surfaces
       .filter((surface) => (totals[surface.id]?.area ?? 0) > 0)
       .map((surface) => {
@@ -323,7 +499,7 @@
           // A face shows its exact area only: the rounded reading belongs to
           // the totals card, where there is room to explain it.
           value: formatExact(surface.exact),
-          x: halfWidth + running.x / running.area,
+          x: centerX + running.x / running.area,
           y: centerY + running.y / running.area,
         };
       });
@@ -367,7 +543,7 @@
           approximate: formatApproximate(value).rounded
             ? `${approximateText(value)} ${linear}`
             : null,
-          x: halfWidth + drawn.mid[0] * push,
+          x: centerX + drawn.mid[0] * push,
           y: centerY + drawn.mid[1] * push,
         },
       ];
@@ -416,12 +592,40 @@
     const hit = hitOf(event);
     lab.hover(hit.target);
     hoveredEdgeId = hit.edgeId;
+    if ((event.target as Element | null)?.closest?.("[data-slice]"))
+      showHandle();
+    else hideHandleSoon();
   }
 
   function clearHover() {
     lab.hover(null);
     hoveredEdgeId = null;
+    hideHandleSoon();
   }
+
+  /**
+   * Whether the slice's arrow is showing. It appears while the pointer is over
+   * the cut on the solid or the arrow itself, and lingers a moment after, long
+   * enough to reach an arrow that hangs off the cut.
+   */
+  let handleShown = $state(false);
+  let handleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function showHandle() {
+    clearTimeout(handleTimer);
+    handleTimer = undefined;
+    handleShown = true;
+  }
+
+  function hideHandleSoon() {
+    if (!handleShown || handleTimer !== undefined) return;
+    handleTimer = setTimeout(() => {
+      handleTimer = undefined;
+      handleShown = false;
+    }, 500);
+  }
+
+  $effect(() => () => clearTimeout(handleTimer));
 
   function onPointerDown(event: PointerEvent) {
     if (event.button !== 0) return;
@@ -462,6 +666,80 @@
       return;
     }
     if (pressed) lab.togglePin(pressed);
+  }
+
+  /** A drag of the slice's arrow: where it started, and the position then. */
+  let sliding = $state<{ x: number; y: number; from: number } | null>(null);
+
+  function onHandleDown(event: PointerEvent) {
+    if (event.button !== 0 || lab.slicePosition === null) return;
+    event.preventDefault();
+    sliding = { x: event.clientX, y: event.clientY, from: lab.slicePosition };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  function onHandleMove(event: PointerEvent) {
+    if (!sliding || !slicing) return;
+    // Only the part of the drag along the arrow moves the plane.
+    const { direction, pixelsPerUnit } = slicing.handle;
+    const along =
+      (event.clientX - sliding.x) * direction[0] +
+      (event.clientY - sliding.y) * direction[1];
+    lab.moveSlice(sliding.from + along / pixelsPerUnit);
+  }
+
+  function onHandleUp(event: PointerEvent) {
+    sliding = null;
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId))
+      target.releasePointerCapture(event.pointerId);
+  }
+
+  /**
+   * How far out along the slice's arrow its heads sit, clear of the position
+   * written in its middle: as far as the arrow runs inside the label, plus a
+   * gap. The label is about 7.2px a character in the mono font, plus its
+   * padding, and 20px high.
+   */
+  const handleReach = $derived.by(() => {
+    if (!slicing || lab.slicePosition === null) return 28;
+    const width = String(lab.slicePosition).length * 7.2 + 14;
+    const [dx, dy] = slicing.handle.direction;
+    const inside = Math.min(
+      Math.abs(dx) < 1e-6 ? Infinity : width / 2 / Math.abs(dx),
+      Math.abs(dy) < 1e-6 ? Infinity : 10 / Math.abs(dy),
+    );
+    return Math.max(28, inside + 14);
+  });
+
+  /** The first and last tenth the plane can stop on, strictly inside. */
+  const sliceEnds = $derived.by(() => {
+    const range = lab.sliceRange;
+    if (!range) return null;
+    return {
+      lowest: clampToRange(-Infinity, range),
+      highest: clampToRange(Infinity, range),
+    };
+  });
+
+  function onHandleKey(event: KeyboardEvent) {
+    if (lab.slicePosition === null || !sliceEnds) return;
+    const steps: Record<string, number> = {
+      ArrowUp: 0.1,
+      ArrowRight: 0.1,
+      ArrowDown: -0.1,
+      ArrowLeft: -0.1,
+      PageUp: 1,
+      PageDown: -1,
+    };
+    let next: number | null = null;
+    if (event.key in steps)
+      next = Math.round((lab.slicePosition + steps[event.key]) * 10) / 10;
+    else if (event.key === "Home") next = sliceEnds.lowest;
+    else if (event.key === "End") next = sliceEnds.highest;
+    if (next === null) return;
+    event.preventDefault();
+    lab.moveSlice(next);
   }
 
   const STEP = 0.18;
@@ -558,7 +836,7 @@
     class="h-full w-full touch-none select-none"
     class:cursor-grab={!dragging}
     class:cursor-grabbing={dragging}
-    viewBox="{-halfWidth} {-centerY} {halfWidth * 2} {halfHeight * 2}"
+    viewBox="{-centerX} {-centerY} {halfWidth * 2} {halfHeight * 2}"
     role="img"
     tabindex="0"
     aria-label={description}
@@ -572,27 +850,6 @@
     onkeydown={onKeyDown}
   >
     <defs>
-      <!-- The floor has no edge to it: it is ruled well past what is drawn and
-           then faded out in a circle around the solid, so the ruling thins into
-           the background instead of stopping at a rectangle. The fade is a
-           circle *on the floor*, laid into the scene by the same matrix as the
-           ruling, so it comes out as the ellipse the eye expects. -->
-      <radialGradient id={FLOOR_FADE_ID}>
-        <stop offset="0.45" stop-color="#fff" />
-        <stop offset="1" stop-color="#000" />
-      </radialGradient>
-      <mask
-        id={FLOOR_MASK_ID}
-        maskUnits="userSpaceOnUse"
-        x={-halfWidth}
-        y={-centerY}
-        width={halfWidth * 2}
-        height={halfHeight * 2}
-      >
-        <g transform={floor.matrix}>
-          <circle cx="0" cy="0" r={floorRadius} fill="url(#{FLOOR_FADE_ID})" />
-        </g>
-      </mask>
       <pattern
         id={HATCH_PATTERN_ID}
         width="14"
@@ -613,44 +870,18 @@
     </defs>
 
     {#snippet ground()}
-      <g
-        mask="url(#{FLOOR_MASK_ID})"
-        opacity={floor.openness}
-        pointer-events="none"
-      >
-        <g transform={floor.matrix}>
-          <circle cx="0" cy="0" r={floorRadius} fill="#46606f" opacity="0.05" />
-          <!-- The lines are laid out in the floor's own units, so
-               non-scaling-stroke is what keeps them a hairline on screen
-               instead of a unit thick in the scene. -->
-          {#each floorLayers as layer (layer.key)}
-            <g stroke="#46606f" stroke-opacity={layer.ink}>
-              <!-- Each direction is anchored on the footprint edge it crosses,
-                   so both run along the solid's own sides. -->
-              {#each floorRules(layer.step, floorRadius, footprint.x) as rule (rule)}
-                <line
-                  x1={rule}
-                  y1={-floorRadius}
-                  x2={rule}
-                  y2={floorRadius}
-                  stroke-width="1"
-                  vector-effect="non-scaling-stroke"
-                />
-              {/each}
-              {#each floorRules(layer.step, floorRadius, footprint.z) as rule (rule)}
-                <line
-                  x1={-floorRadius}
-                  y1={rule}
-                  x2={floorRadius}
-                  y2={rule}
-                  stroke-width="1"
-                  vector-effect="non-scaling-stroke"
-                />
-              {/each}
-            </g>
-          {/each}
-        </g>
-      </g>
+      <Floor
+        {floor}
+        radius={floorRadius}
+        layers={floorLayers}
+        {footprint}
+        view={{
+          x: -centerX,
+          y: -centerY,
+          width: halfWidth * 2,
+          height: halfHeight * 2,
+        }}
+      />
     {/snippet}
 
     <!-- Seen from above the solid stands on the floor and hides the part it
@@ -658,27 +889,159 @@
          so it goes on top instead. -->
     {#if !floor.fromBelow}{@render ground()}{/if}
 
-    {#each facets as facet, index (index)}
+    {#if slicing}
+      <!-- The plane first: inside the solid the far faces and the cross
+           section cover it, and outside it shows as a faint sheet. -->
       <polygon
-        points={facet.points}
-        fill={facet.fill}
-        stroke={facet.stroke}
-        stroke-width={facet.stroke === "#0b1a22" &&
-        lab.isActive(surfaceTarget(facet.surfaceId))
-          ? 4
-          : 1.5}
-        stroke-linejoin="round"
-        data-target={surfaceTarget(facet.surfaceId)}
+        points={slicing.sheet}
+        fill="#f59e0b"
+        fill-opacity="0.12"
+        stroke="#b45309"
+        stroke-opacity="0.45"
+        stroke-width="1.5"
+        stroke-dasharray="6 5"
+        pointer-events="none"
+        data-testid="cutting-plane"
       />
-      {#if lab.isActive(surfaceTarget(facet.surfaceId))}
+      {#each farFacets as facet, index (index)}
         <polygon
           points={facet.points}
-          fill="url(#{HATCH_PATTERN_ID})"
-          stroke="none"
+          fill={facet.fill}
+          fill-opacity="0.55"
+          stroke={facet.stroke}
+          stroke-opacity="0.35"
+          stroke-width="1"
+          stroke-linejoin="round"
           pointer-events="none"
         />
+      {/each}
+      <polygon
+        points={slicing.outline}
+        fill="#f59e0b"
+        fill-opacity={lab.isActive(sectionTarget("area")) ? 1 : 0.85}
+        stroke="none"
+        class="cursor-pointer"
+        data-target={sectionTarget("area")}
+        data-slice
+        data-testid="section-on-solid"
+      />
+      {#each nearFacets as facet, index (index)}
+        <polygon
+          points={facet.points}
+          fill={facet.fill}
+          fill-opacity="0.35"
+          stroke={facet.stroke}
+          stroke-opacity={facet.stroke === "#0b1a22" ? 0.8 : 0}
+          stroke-width="1.5"
+          stroke-linejoin="round"
+          pointer-events="none"
+        />
+      {/each}
+      <polygon
+        points={slicing.outline}
+        fill="none"
+        stroke="#b45309"
+        stroke-width="3"
+        stroke-linejoin="round"
+        pointer-events="none"
+      />
+      {#each slicing.heights as height (height.id)}
+        {#if height.always || lab.isActive(sectionTarget("area"))}
+          <line
+            x1={height.x1}
+            y1={height.y1}
+            x2={height.x2}
+            y2={height.y2}
+            stroke="#7c2d12"
+            stroke-width="2"
+            stroke-dasharray="6 4"
+            pointer-events="none"
+          />
+        {/if}
+      {/each}
+      {#each slicing.sides as side (side.id)}
+        {#if lab.isActive(side.target)}
+          <line
+            x1={side.x1}
+            y1={side.y1}
+            x2={side.x2}
+            y2={side.y2}
+            stroke="#c2410c"
+            stroke-width="6"
+            stroke-linecap="round"
+            pointer-events="none"
+            data-testid="section-side-on-solid"
+          />
+        {/if}
+        <line
+          x1={side.x1}
+          y1={side.y1}
+          x2={side.x2}
+          y2={side.y2}
+          stroke="transparent"
+          stroke-width="14"
+          stroke-linecap="round"
+          class="cursor-pointer"
+          data-target={side.target}
+          data-section-side={side.id}
+          data-slice
+        />
+      {/each}
+      <line
+        x1={slicing.travel.from[0]}
+        y1={slicing.travel.from[1]}
+        x2={slicing.travel.to[0]}
+        y2={slicing.travel.to[1]}
+        stroke="#7c2d12"
+        stroke-width="2"
+        stroke-dasharray="5 4"
+        stroke-linecap="round"
+        pointer-events="none"
+        data-testid="slice-travel"
+      />
+      <circle
+        cx={slicing.travel.from[0]}
+        cy={slicing.travel.from[1]}
+        r="3.5"
+        fill="#7c2d12"
+        pointer-events="none"
+      />
+      {#if slicing.angle}
+        <g
+          fill="none"
+          stroke="#7c2d12"
+          stroke-width="1.8"
+          stroke-linejoin="round"
+          pointer-events="none"
+          data-testid="slice-angle"
+        >
+          <polyline points={slicing.angle.arms} />
+          <polyline points={slicing.angle.arc} />
+        </g>
       {/if}
-    {/each}
+    {:else}
+      {#each facets as facet, index (index)}
+        <polygon
+          points={facet.points}
+          fill={facet.fill}
+          stroke={facet.stroke}
+          stroke-width={facet.stroke === "#0b1a22" &&
+          lab.isActive(surfaceTarget(facet.surfaceId))
+            ? 4
+            : 1.5}
+          stroke-linejoin="round"
+          data-target={surfaceTarget(facet.surfaceId)}
+        />
+        {#if lab.isActive(surfaceTarget(facet.surfaceId))}
+          <polygon
+            points={facet.points}
+            fill="url(#{HATCH_PATTERN_ID})"
+            stroke="none"
+            pointer-events="none"
+          />
+        {/if}
+      {/each}
+    {/if}
 
     <!-- The mark itself, on the face it belongs to. Drawn after the facets, so
          it sits on the top face rather than under it. -->
@@ -733,6 +1096,14 @@
     class="pointer-events-none absolute inset-0 overflow-hidden"
     class:invisible={!measured}
   >
+    {#if slicing?.angle}
+      <span
+        class="absolute -translate-x-1/2 -translate-y-1/2 font-mono text-xs font-bold text-[#7c2d12]"
+        style:left="{centerX + slicing.angle.label[0]}px"
+        style:top="{centerY + slicing.angle.label[1]}px"
+        data-testid="slice-angle-label">{slicing.angle.degrees}°</span
+      >
+    {/if}
     {#each badges as badge (badge.surface.id)}
       <button
         type="button"
@@ -802,14 +1173,103 @@
       >
         {#if label.working}
           <span class="block text-ink-soft"
-            ><MathText text={label.working} /></span
+            ><MathText text={label.working} fractions={!!slicing} /></span
           >
         {/if}
-        <span class="block font-bold"><MathText text={label.text} /></span>
+        <!-- In the slice view a cut can make a length such as 5√35/47, which
+             is set as one number over the other there. -->
+        <span class="block font-bold"
+          ><MathText text={label.text} fractions={!!slicing} /></span
+        >
         {#if label.approximate}
           <span class="block text-ink-soft">{label.approximate}</span>
         {/if}
       </button>
     {/each}
+
+    {#if slicing && lab.slicePosition !== null && sliceEnds}
+      <!-- Dragged along the arrow, the plane moves through the solid; the arrow
+           keys move it a tenth at a time. Last, so no badge can cover it. It
+           shows only while the cut is pointed at, or the arrow is held or has
+           the keyboard, except on a touch screen, which cannot point without
+           pressing. Hidden, it still answers the pointer, so it can be found
+           where it is. -->
+      <div
+        role="slider"
+        tabindex="0"
+        aria-label={t("slice.handle", {
+          label: slicePositionLabel(
+            lab.kind,
+            lab.sliceDirection,
+            lab.sliceHeading,
+          ),
+        })}
+        aria-valuemin={sliceEnds.lowest}
+        aria-valuemax={sliceEnds.highest}
+        aria-valuenow={lab.slicePosition}
+        aria-valuetext="{lab.slicePosition} {linear}"
+        data-testid="slice-handle"
+        class="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 touch-none rounded-full transition-opacity duration-150 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-accent [@media(hover:none)]:opacity-100"
+        class:opacity-0={!handleShown && !sliding}
+        class:cursor-grab={!sliding}
+        class:cursor-grabbing={sliding}
+        style:left="{centerX + slicing.handle.at[0]}px"
+        style:top="{centerY + slicing.handle.at[1]}px"
+        style:width="{2 * (handleReach + 4)}px"
+        style:height="{2 * (handleReach + 4)}px"
+        onpointerenter={showHandle}
+        onpointerleave={hideHandleSoon}
+        onpointerdown={onHandleDown}
+        onpointermove={onHandleMove}
+        onpointerup={onHandleUp}
+        onpointercancel={onHandleUp}
+        onkeydown={onHandleKey}
+      >
+        <svg
+          class="h-full w-full overflow-visible"
+          viewBox="{-(handleReach + 4)} {-(handleReach + 4)} {2 *
+            (handleReach + 4)} {2 * (handleReach + 4)}"
+          aria-hidden="true"
+        >
+          <g
+            transform="rotate({slicing.handle.degrees})"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          >
+            <g stroke="white" stroke-width="6" fill="white" opacity="0.9">
+              <line x1={-handleReach + 8} y1="0" x2={handleReach - 8} y2="0" />
+              <polygon
+                points="{handleReach + 2},0 {handleReach - 10},-9 {handleReach -
+                  10},9"
+              />
+              <polygon
+                points="{-handleReach - 2},0 {-handleReach +
+                  10},-9 {-handleReach + 10},9"
+              />
+            </g>
+            <g stroke="#7c2d12" stroke-width="3" fill="#7c2d12">
+              <line x1={-handleReach + 8} y1="0" x2={handleReach - 8} y2="0" />
+              <polygon
+                points="{handleReach},0 {handleReach - 9},-7 {handleReach -
+                  9},7"
+                stroke-width="1.5"
+              />
+              <polygon
+                points="{-handleReach},0 {-handleReach + 9},-7 {-handleReach +
+                  9},7"
+                stroke-width="1.5"
+              />
+            </g>
+          </g>
+        </svg>
+        <!-- The position, written between the heads, upright however the
+             arrow points. -->
+        <span
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-md border border-[#7c2d12]/40 bg-panel px-1.5 py-0.5 font-mono text-xs font-bold whitespace-nowrap text-[#7c2d12] shadow-sm"
+          aria-hidden="true"
+          data-testid="slice-travel-label">{lab.slicePosition}</span
+        >
+      </div>
+    {/if}
   </div>
 </div>

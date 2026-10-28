@@ -72,3 +72,15 @@ export function chipTint(hue: number): {
     text: `hsl(${hue} 72% 24%)`,
   };
 }
+
+/**
+ * Shaded fill for one face of a unit cube. Layers alternate between the
+ * solid's own slate blue and a lighter, brighter one, so a layer can still be
+ * picked out as the same cubes once it has been laid flat beside the others.
+ */
+export function cubeFill(layer: number, diffuse: number): string {
+  const clamped = Math.max(0, Math.min(1, diffuse));
+  return layer % 2 === 0
+    ? `hsl(203 40% ${30 + 44 * clamped}%)`
+    : `hsl(193 58% ${46 + 36 * clamped}%)`;
+}
