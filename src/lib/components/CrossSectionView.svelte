@@ -6,6 +6,7 @@
   import { domainText, t, unitLabels } from "$lib/i18n/index.svelte";
   import { sectionTarget, type LabState } from "$lib/state/lab.svelte";
   import { gridLayers, gridScale } from "$lib/ui/grid";
+  import { cutMiddle } from "$lib/ui/cutMiddle";
 
   let {
     lab,
@@ -32,19 +33,13 @@
   const half = $derived(Math.max(diameter, 1) / 2);
 
   /**
-   * The point of the plane nearest the solid's centre, in the drawing's frame,
-   * which goes in the middle of the window. Every point of the solid lies
-   * within its extent of the centre, so every cross section lies within that
-   * distance of this point: a window that holds the solid's extent at this
-   * scale holds every cut, and the cut keeps its place in it as it moves.
+   * The cut's own middle goes in the middle of the window, so it grows and
+   * shrinks straight about it as the plane moves; see `cutMiddle` for how a
+   * cut that would not fit around that is kept inside.
    */
-  const middle = $derived.by<Point2>(() => {
-    const [x, y] = section.outline2d[0];
-    const at = section.outline3d[0];
-    const dot = (v: readonly number[]) =>
-      v[0] * at[0] + v[1] * at[1] + v[2] * at[2];
-    return [x - dot(section.plane.across), y - dot(section.plane.up)];
-  });
+  const middle = $derived<Point2>(
+    cutMiddle(section.outline2d, half / Math.max(scale, 1e-9)),
+  );
 
   /** A face-on point on screen. The drawing's y axis points up; the screen's down. */
   function place([x, y]: Point2): Point2 {
